@@ -1,0 +1,52 @@
+{
+  "name": "flowpane",
+  "version": "0.1.0",
+  "description": "Live side panel showing the flow, todos and decisions of the current Claude Code conversation",
+  "author": {
+    "name": "Diwaker Singh",
+    "url": "https://github.com/diwakersurya"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open at startup",
+      "description": "Open the Flowpane pane when a session starts (seats from 144 terminal columns)",
+      "default": true
+    },
+    "decisionTool": {
+      "type": "boolean",
+      "title": "Decision tool",
+      "description": "Give the model a RecordDecision tool and ask it to log choices between approaches",
+      "default": true
+    },
+    "inferDecisions": {
+      "type": "boolean",
+      "title": "Infer decisions",
+      "description": "When a turn logged no decision, ask the small fast model to extract one from the answer (costs model calls)",
+      "default": false
+    },
+    "minimap": {
+      "type": "boolean",
+      "title": "Minimap",
+      "description": "Show a one-row minimap of every tool call in the terminal",
+      "default": true
+    },
+    "maxNodes": {
+      "type": "number",
+      "title": "Max flow nodes",
+      "description": "Older turns collapse to a summary past this many nodes",
+      "default": 500
+    }
+  },
+  "homepage": "https://diwakersurya.github.io/flowpane/",
+  "repository": "https://github.com/diwakersurya/flowpane",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "mod",
+    "side-panel",
+    "todos",
+    "visualization"
+  ]
+}

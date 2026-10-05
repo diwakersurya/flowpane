@@ -1,0 +1,15 @@
+{
+  "name": "flowpane",
+  "description": "Flowpane: a live side panel for Claude Code",
+  "owner": {
+    "name": "Diwaker Singh",
+    "url": "https://github.com/diwakersurya"
+  },
+  "plugins": [
+    {
+      "name": "flowpane",
+      "source": "./",
+      "description": "Live side panel showing the flow, todos and decisions of the current Claude Code conversation"
+    }
+  ]
+}
