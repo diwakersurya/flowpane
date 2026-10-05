@@ -62,6 +62,8 @@ declare module 'claude-code' {
       toggled: string[]
       tab: Tab
       context: ContextFill | null
+      /** The cat's head: -2 looking left … 2 looking right. */
+      petPos: number
     }
   }
 }

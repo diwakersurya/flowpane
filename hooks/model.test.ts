@@ -7,6 +7,8 @@ import {
   hasDecisionCue,
   minimapCells,
   parseDecision,
+  petFrame,
+  stepToward,
   prune,
   startTool,
   startTurn,
@@ -80,4 +82,14 @@ test('minimap and lanes draw', async () => {
   const svg = svgLanes(n, 5)
   expect(svg.startsWith('<svg')).toBe(true)
   expect(svg.includes('Edit &lt;x&gt;')).toBe(true)
+})
+
+test('cat frames keep their width and turn one step at a time', async () => {
+  for (const p of [-2, -1, 0, 1, 2]) expect(petFrame(p).every(line => line.length === 7)).toBe(true)
+  expect(petFrame(-2)[1]).toBe('(<.<  )')
+  expect(petFrame(2)[1]).toBe('(  >.>)')
+  let pos = -2
+  const seen: number[] = []
+  while (pos !== 2) seen.push((pos = stepToward(pos, 2)))
+  expect(seen).toEqual([-1, 0, 1, 2])
 })

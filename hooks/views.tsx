@@ -168,3 +168,24 @@ export function guard({ Text }: Common, name: string, draw: () => RenderNode | n
     )
   }
 }
+
+/** The cat, bottom right. Text on the terminal; an SVG elsewhere, where Text may not be monospace. */
+export function Pet({ Box, Text }: Common, p: { frame: readonly string[]; svg?: RenderNode }) {
+  return (
+    <Box justifyContent="flex-end" marginTop={1}>
+      {p.svg ?? (
+        <Box flexDirection="column">
+          {p.frame.map(line => (
+            <Text color="#e0a96d">{line}</Text>
+          ))}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+export function petSvg(frame: readonly string[]): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const rows = frame.map((line, i) => `<text x="2" y="${14 + i * 15}" xml:space="preserve">${esc(line)}</text>`).join('')
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="50" font-family="ui-monospace,Menlo,monospace" font-size="13" fill="#e0a96d">${rows}</svg>`
+}

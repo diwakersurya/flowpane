@@ -2,11 +2,12 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 function world(on: On) {
-  mock.clock(on, { now: 1_000 })
+  const clock = mock.clock(on, { now: 1_000 })
   mock.store(on)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.panes', () => ({ value: [] }))
+  return clock
 }
 
 const PANE = {
@@ -34,7 +35,7 @@ test('turns, tools, todos and decisions reach the pane on every surface', async 
       { content: 'Add tests', status: 'in_progress', activeForm: 'Adding tests' },
     ],
   })
-  await $.tool.call({ tool: 'mcp__flowpane__RecordDecision', tool_use_id: 'u3', choice: 'Middleware over per-route guard', why: 'one place to audit' })
+  await $.tool.call({ tool: 'mcp__flowpane__RecordDecision', tool_use_id: 'u3', choice: 'Middleware over per-route guard', why: 'one place to audit' } as never)
 
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -65,4 +66,25 @@ test('/flow todos opens on the todos tab', async ($, on) => {
   expect(r.text).toBe('Flowpane opened.')
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ text: /No todos yet/ })).toBeDefined()
+})
+
+test('the cat turns its head toward the tab', async ($, on) => {
+  const clock = world(on)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const looks = async (eyes: string) =>
+      surface === 'terminal'
+        ? (await ui.find({ type: 'Text', text: eyes })) !== undefined
+        : (await ui.find({ type: 'Svg' })) !== undefined
+    expect(await looks('<.<')).toBe(true)
+    await ui.press({ key: 'tab-decisions' })
+    await clock.advance(90)
+    expect(await looks('o.o')).toBe(true)
+    await clock.advance(90 * 4)
+    expect(await looks('>.>')).toBe(true)
+    await ui.press({ key: 'tab-flow' })
+    await clock.advance(90 * 5)
+    expect(await looks('<.<')).toBe(true)
+    await ui.unmount()
+  }
 })

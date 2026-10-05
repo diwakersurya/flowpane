@@ -18,6 +18,9 @@ A live side panel for Claude Code. While the conversation runs, it shows what th
 │                                       │
 │ ◆ Middleware over per-route guard     │
 │   one place to audit                  │
+│                               /\_/\   │
+│                              (<.<  )  │
+│                               > ^ <   │
 ╰───────────────────────────────────────╯
 ```
 
@@ -26,6 +29,7 @@ A live side panel for Claude Code. While the conversation runs, it shows what th
 - **Decisions**: choices the agent made, why, and what it rejected. Each one links back to the turn that made it.
 - **Context bar**: tokens used and tokens left in the context window, so you can tell when to start a fresh chat.
 - **Minimap** (terminal): one coloured cell per tool call for the whole session. Blue is reads, amber is edits, violet is shell, teal is agents, pink is MCP, and red is errors.
+- **A cat** at the bottom of the panel turns its head toward the tab you pick: left for Flow, straight ahead for Todos, right for Decisions.
 - **Lanes** (desktop app, VS Code): an SVG diagram with one lane for the main agent and one per subagent, with hover tooltips.
 
 ## Install

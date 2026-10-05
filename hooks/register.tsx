@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { ContextFill, Decision, FlowNode, Snapshot, Tab, Todo } from '../types'
 import {
@@ -10,15 +10,18 @@ import {
   hasDecisionCue,
   minimapCells,
   parseDecision,
+  PET_TARGET,
+  petFrame,
   prune,
   startTool,
+  stepToward,
   startTurn,
   svgLanes,
   taskCreate,
   taskUpdate,
   toolLabel,
 } from './model'
-import { DecisionList, FlowList, guard, Header, LastDecision, TodoList } from './views'
+import { DecisionList, FlowList, guard, Header, LastDecision, Pet, petSvg, TodoList } from './views'
 
 const PANE = 'flowpane'
 const TITLE = 'Flowpane'
@@ -31,6 +34,7 @@ const decisions = atom({ plugin: 'flowpane', key: 'decisions' } as const, [] as 
 const agents = atom({ plugin: 'flowpane', key: 'agents' } as const, {} as Record<string, string>)
 const toggled = atom({ plugin: 'flowpane', key: 'toggled' } as const, [] as string[])
 const tab = atom({ plugin: 'flowpane', key: 'tab' } as const, 'flow' as Tab)
+const petPos = atom({ plugin: 'flowpane', key: 'petPos' } as const, PET_TARGET.flow)
 const context = atom({ plugin: 'flowpane', key: 'context' } as const, null as ContextFill | null)
 
 const DECISION_PROMPT = `# Flowpane decision log
@@ -78,6 +82,28 @@ async function reset($: $) {
   await update($, decisions, () => [])
   await update($, agents, () => ({}))
   await update($, toggled, () => [])
+}
+
+const PET_STEP_MS = 90
+let petTimer: Timer | undefined
+
+/** Switches tab and turns the cat's head toward it, one frame per step. */
+async function setTab($: $, next: Tab) {
+  await update($, tab, () => next)
+  petTimer?.cancel()
+  const target = PET_TARGET[next]
+  petTimer = $.clock.every(PET_STEP_MS, () => {
+    void stepPet($, target)
+  })
+}
+
+async function stepPet($: $, target: number) {
+  const pos = await read($, petPos)
+  if (pos === target) {
+    petTimer?.cancel()
+    return
+  }
+  await update($, petPos, p => stepToward(p, target))
 }
 
 function openPane($: $) {
@@ -142,7 +168,7 @@ export const register: Register = (on, options) => {
       return { text: 'Flowpane view cleared.' }
     }
     if (arg === 'flow' || arg === 'todos' || arg === 'decisions') {
-      await update($, tab, () => arg)
+      await setTab($, arg)
     } else if (arg === '' && (await $.ui.panes()).some(p => p.id === PANE)) {
       await $.ui.close({ id: PANE })
       await $.store.set('closedByPerson', true)
@@ -207,7 +233,7 @@ export const register: Register = (on, options) => {
 
   // ── tool calls ───────────────────────────────────────────────────
 
-  on('tool.call', { tool: DECISION_TOOL }, async ($, e) => {
+  on('tool.call', { tool: /^mcp__flowpane__RecordDecision$/ }, async ($, e) => {
     const input = e as unknown as { choice?: unknown; why?: unknown; alternatives?: unknown }
     const d = parseDecision(JSON.stringify(input))
     if (!d) return { deny: 'RecordDecision needs a non-empty "choice" string.' }
@@ -260,19 +286,20 @@ export const register: Register = (on, options) => {
     const els = $.ui.resolve(e)
     const width = Math.max(20, e.props.bodyColumns)
     const room = Math.max(6, (e.viewport?.rows ?? 30) - 8)
-    const [n, t, d, open, current, ctx] = await Promise.all([
+    const [n, t, d, open, current, ctx, pos] = await Promise.all([
       read($, nodes),
       read($, todos),
       read($, decisions),
       read($, toggled),
       read($, tab),
       read($, context),
+      read($, petPos),
     ])
     const now = await $.clock.now()
-    const onTab = (next: Tab) => void update($, tab, () => next)
+    const onTab = (next: Tab) => void setTab($, next)
     const onToggle = (id: string) => void update($, toggled, list => (list.includes(id) ? list.filter(x => x !== id) : [...list, id]))
     const onJump = (turnId: string) => {
-      void update($, tab, () => 'flow' as Tab)
+      void setTab($, 'flow')
       const latest = currentTurn(n)?.id
       // Open the turn: the latest is open by default, the rest open when toggled.
       void update($, toggled, list =>
@@ -317,6 +344,12 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" marginTop={1}>
           {body}
         </Box>
+        {guard(els, 'pet', () => {
+          const frame = petFrame(pos)
+          if (e.surface === 'terminal') return Pet(els, { frame })
+          const { Svg } = $.ui.resolve(e)
+          return Pet(els, { frame, svg: <Svg source={petSvg(frame)} alt="Flowpane cat" width={64} height={50} /> })
+        })}
       </Box>
     )
   })
