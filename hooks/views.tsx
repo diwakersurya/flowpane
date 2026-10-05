@@ -1,6 +1,6 @@
 import type { Elements, RenderNode, UiPressArgument } from 'claude-code'
 
-import type { Ask, Guards, Pin, Tab } from '../types'
+import type { Ask, Guards, Pin, QueueItem, Snippet, Tab } from '../types'
 import { GUARD_LABEL, GUARD_SHORT } from './logic'
 
 /** What every surface draws. */
@@ -11,12 +11,16 @@ export type Field = Elements['terminal']['Input'] | undefined
 const TABS: { tab: Tab; label: string; hotkey: string }[] = [
   { tab: 'pins', label: 'Pins', hotkey: 'p' },
   { tab: 'ask', label: 'Ask', hotkey: 'a' },
+  { tab: 'queue', label: 'Queue', hotkey: 'q' },
 ]
 
-export function Header({ Box, Button }: Common, p: { tab: Tab; pinsOn: number; guardsOn: number; onTab: (t: Tab) => void }) {
+const GUARD_KEYS = Object.keys(GUARD_LABEL) as (keyof Guards)[]
+
+export function Header({ Box, Button }: Common, p: { tab: Tab; pinsOn: number; guardsOn: number; queued: number; onTab: (t: Tab) => void }) {
   const badge: Record<Tab, string> = {
     pins: p.pinsOn + p.guardsOn ? ` ${p.pinsOn + p.guardsOn} on` : '',
     ask: '',
+    queue: p.queued ? ` ${p.queued}` : '',
   }
   return (
     <Box gap={1}>
@@ -34,23 +38,28 @@ export function Header({ Box, Button }: Common, p: { tab: Tab; pinsOn: number; g
   )
 }
 
+const ByCommand = ({ Text }: Common, command: string) => <Text dimColor>No text fields here yet: use {command}.</Text>
+
 export function PinsTab(
-  { Box, Text, Button }: Common,
+  els: Common,
   Input: Field,
   p: {
     pins: readonly Pin[]
     guards: Guards
+    fence: readonly string[]
     onGuard: (k: keyof Guards) => void
+    onFence: (text: string) => void
     onAdd: (text: string) => void
     onToggle: (id: string) => void
     onRemove: (id: string) => void
   },
 ) {
+  const { Box, Text, Button } = els
   return (
     <Box flexDirection="column">
       <Text bold>Guards</Text>
-      <Box flexDirection="column" marginBottom={1}>
-        {(Object.keys(GUARD_LABEL) as (keyof Guards)[]).map(k => (
+      <Box flexDirection="column">
+        {GUARD_KEYS.map(k => (
           <Button
             key={`guard-${k}`}
             plain
@@ -59,6 +68,19 @@ export function PinsTab(
             onPress={() => p.onGuard(k)}
           />
         ))}
+      </Box>
+      <Box gap={1} marginBottom={1}>
+        <Text>{p.fence.length ? '●' : '○'} Fence</Text>
+        {p.fence.length ? (
+          <>
+            <Text color="cyan">{p.fence.join(', ')}</Text>
+            <Button key="fence-clear" plain dimColor label="✕" onPress={() => p.onFence('')} />
+          </>
+        ) : Input ? (
+          <Input key="fence" placeholder="src/auth/** (edits stay inside)" submitLabel="Fence" onSubmit={text => p.onFence(text)} />
+        ) : (
+          ByCommand(els, '/fence <globs>')
+        )}
       </Box>
       <Text bold>Pinned rules</Text>
       <Text dimColor wrap="wrap">
@@ -80,7 +102,7 @@ export function PinsTab(
         {Input ? (
           <Input key="new-pin" placeholder="Pin a rule, e.g. use pnpm, not npm" submitLabel="Pin" onSubmit={text => p.onAdd(text)} />
         ) : (
-          <Text dimColor>No text fields here yet: add pins with /pin &lt;rule&gt;.</Text>
+          ByCommand(els, '/pin <rule>')
         )}
       </Box>
     </Box>
@@ -88,7 +110,7 @@ export function PinsTab(
 }
 
 export function AskTab(
-  { Box, Text, Button, Markdown }: Common,
+  els: Common,
   Input: Field,
   p: {
     asks: readonly Ask[]
@@ -98,20 +120,17 @@ export function AskTab(
     onRemove: (id: string) => void
   },
 ) {
+  const { Box, Text, Button, Markdown } = els
   return (
     <Box flexDirection="column">
-      {Input ? (
-        <Input key="ask" placeholder="Ask about this conversation…" submitLabel="Ask" onSubmit={q => p.onAsk(q)} />
-      ) : (
-        <Text dimColor>No text fields here yet: ask with /ask &lt;question&gt;.</Text>
-      )}
+      {Input ? <Input key="ask" placeholder="Ask about this conversation…" submitLabel="Ask" onSubmit={q => p.onAsk(q)} /> : ByCommand(els, '/ask <question>')}
       <Text dimColor wrap="wrap">
         Answered from the conversation without adding to it or interrupting the agent.
       </Text>
       <Box gap={1} marginTop={1} flexWrap="wrap">
         <Text dimColor>Selection:</Text>
         <Button key="sel-explain" label="Explain" hotkey="e" onPress={press => p.onSelection('explain', press)} />
-        <Button key="sel-quote" label="Quote" hotkey="q" onPress={press => p.onSelection('quote', press)} />
+        <Button key="sel-quote" label="Quote" onPress={press => p.onSelection('quote', press)} />
         <Button key="sel-pin" label="Pin" onPress={press => p.onSelection('pin', press)} />
       </Box>
       {[...p.asks].reverse().map(a => (
@@ -138,22 +157,118 @@ export function AskTab(
   )
 }
 
-/** One row above the prompt: the guards as switches, and how many pins are on. */
-export function Band({ Box, Text, Button }: Common, p: { guards: Guards; pinsOn: number; onGuard: (k: keyof Guards) => void }) {
+export function QueueTab(
+  els: Common,
+  Input: Field,
+  p: {
+    queue: readonly QueueItem[]
+    autoSend: boolean
+    snippets: readonly Snippet[]
+    onAuto: () => void
+    onAdd: (text: string) => void
+    onSend: (id: string) => void
+    onMove: (id: string, by: -1 | 1) => void
+    onRemove: (id: string) => void
+    onAddSnippet: (text: string) => void
+    onRemoveSnippet: (id: string) => void
+  },
+) {
+  const { Box, Text, Button } = els
   return (
-    <Box gap={1}>
-      <Text dimColor>guards</Text>
-      {(Object.keys(GUARD_SHORT) as (keyof Guards)[]).map(k => (
-        <Button
-          key={`band-${k}`}
-          plain
-          label={`${p.guards[k] ? '●' : '○'} ${GUARD_SHORT[k]}`}
-          variant={p.guards[k] ? 'primary' : undefined}
-          dimColor={!p.guards[k]}
-          onPress={() => p.onGuard(k)}
-        />
+    <Box flexDirection="column">
+      <Button
+        key="auto-send"
+        plain
+        label={`${p.autoSend ? '●' : '○'} Send the next one when the agent finishes`}
+        variant={p.autoSend ? 'primary' : undefined}
+        onPress={p.onAuto}
+      />
+      {Input ? (
+        <Input key="enqueue" placeholder="Then… (queued until the agent is idle)" submitLabel="Queue" onSubmit={text => p.onAdd(text)} />
+      ) : (
+        ByCommand(els, '/queue <prompt>')
+      )}
+      {p.queue.length === 0 && <Text dimColor>Nothing queued.</Text>}
+      {p.queue.map((item, i) => (
+        <Box gap={1}>
+          <Text dimColor>{i + 1}.</Text>
+          <Box flexGrow={1}>
+            <Text wrap="wrap">{item.text}</Text>
+          </Box>
+          <Button key={`send-${item.id}`} plain label="▶" onPress={() => p.onSend(item.id)} />
+          {i > 0 && <Button key={`up-${item.id}`} plain dimColor label="↑" onPress={() => p.onMove(item.id, -1)} />}
+          {i < p.queue.length - 1 && <Button key={`down-${item.id}`} plain dimColor label="↓" onPress={() => p.onMove(item.id, 1)} />}
+          <Button key={`dequeue-${item.id}`} plain dimColor label="✕" onPress={() => p.onRemove(item.id)} />
+        </Box>
       ))}
-      {p.pinsOn > 0 && <Text dimColor>· {p.pinsOn} pin{p.pinsOn === 1 ? '' : 's'} on</Text>}
+
+      <Box marginTop={1}>
+        <Text bold>Snippets</Text>
+      </Box>
+      <Text dimColor wrap="wrap">
+        One-click prompts in the band above the prompt box.
+      </Text>
+      {p.snippets.map(s => (
+        <Box gap={1}>
+          <Text color="cyan">{s.label}</Text>
+          <Box flexGrow={1}>
+            <Text dimColor wrap="truncate">
+              {s.text}
+            </Text>
+          </Box>
+          <Button key={`unsnip-${s.id}`} plain dimColor label="✕" onPress={() => p.onRemoveSnippet(s.id)} />
+        </Box>
+      ))}
+      {Input ? (
+        <Input key="new-snippet" placeholder="label: prompt text" submitLabel="Add" onSubmit={text => p.onAddSnippet(text)} />
+      ) : (
+        ByCommand(els, '/snippet label: text')
+      )}
+    </Box>
+  )
+}
+
+/** Above the prompt: the guards as switches (row one), the snippets (row two, room allowing). */
+export function Band(
+  { Box, Text, Button }: Common,
+  p: {
+    guards: Guards
+    fence: readonly string[]
+    pinsOn: number
+    queued: number
+    snippets: readonly Snippet[]
+    rows: number
+    onGuard: (k: keyof Guards) => void
+    onSnippet: (id: string) => void
+  },
+) {
+  const extras = [p.fence.length ? `fence ${p.fence.join(',')}` : '', p.pinsOn ? `${p.pinsOn} pin${p.pinsOn === 1 ? '' : 's'}` : '', p.queued ? `${p.queued} queued` : '']
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <Box flexDirection="column">
+      <Box gap={1}>
+        <Text dimColor>guards</Text>
+        {GUARD_KEYS.map(k => (
+          <Button
+            key={`band-${k}`}
+            plain
+            label={`${p.guards[k] ? '●' : '○'} ${GUARD_SHORT[k]}`}
+            variant={p.guards[k] ? 'primary' : undefined}
+            dimColor={!p.guards[k]}
+            onPress={() => p.onGuard(k)}
+          />
+        ))}
+        {extras && <Text dimColor>· {extras}</Text>}
+      </Box>
+      {p.rows >= 2 && p.snippets.length > 0 && (
+        <Box gap={1}>
+          <Text dimColor>prompts</Text>
+          {p.snippets.slice(0, 6).map(s => (
+            <Button key={`snip-${s.id}`} plain label={`[${s.label}]`} onPress={() => p.onSnippet(s.id)} />
+          ))}
+        </Box>
+      )}
     </Box>
   )
 }

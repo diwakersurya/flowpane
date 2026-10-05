@@ -1,8 +1,9 @@
 # Flowpane
 
-A small side panel for Claude Code that does two things no status line or hook can:
+A small side panel for Claude Code that does things no status line or hook can:
 
-- **Pins + guards:** steer the agent live. Pin rules it follows on every request, even after `/compact`. Flip guards that block or ask before certain tool calls, from the panel, with no settings to edit and no restart.
+- **Pins + guards:** steer the agent live. Pin rules it follows on every request, even after `/compact`. Flip guards that block or ask before certain tool calls: read-only, no push, no edits on main, a path fence, and a secret shield. No settings to edit, no restart.
+- **Queue + snippets:** line up follow-up prompts while the agent works; each one sends itself when the agent finishes. One-click prompts sit above the prompt box.
 - **Ask aside:** ask a quick question about the conversation and get the answer in the panel. The question never enters the conversation, never interrupts the agent, and doesn't use up its context.
 
 **Site:** https://diwakersurya.github.io/flowpane/
@@ -34,11 +35,15 @@ A small side panel for Claude Code that does two things no status line or hook c
 | Read-only | Blocks `Edit`, `Write` and `NotebookEdit`, and shell commands that change files (`rm`, `mv`, `>` redirects, `sed -i`, `git commit`, `npm install`…). The agent is told to describe changes instead |
 | No git push | Blocks `git push`. Commits still work |
 | Ask before Bash | Every shell command goes through Claude Code's own permission prompt, even ones your settings would allow |
+| No edits on main | While the branch is `main` or `master`, blocks file changes and tells the agent to create a branch (`git switch -c`) or a worktree first. Branching commands stay allowed |
+| Secret shield | **On by default.** Blocks reading `.env` files, private keys and credential files (including `cat .env` and `printenv`). Masks tokens in every tool result before the model sees them: AWS, GitHub, Anthropic/OpenAI, Stripe, Slack, Google keys, JWTs, private key blocks, and `PASSWORD=…`-style values become `«redacted»`. Turn off the default with `secretShield` in `/config` |
+| Fence | Type globs (e.g. `src/auth/**, tests/**`) or run `/fence src/auth/**`. Edits outside them are blocked, and shell commands that change files need your approval. `/fence off` removes it |
 
 The guards also sit in a one-line **band above the prompt**, so you can see and flip them without opening the panel:
 
 ```
-guards  ● Read-only  ○ No push  ○ Ask Bash  · 2 pins on
+guards  ○ Read-only  ○ No push  ○ Ask Bash  ● Not main  ● Secrets  · fence src/auth/** · 2 pins · 1 queued
+prompts [Run tests & fix] [Commit] [Explain diff]
 ❯ _
 ```
 
@@ -47,6 +52,12 @@ Click a switch, or press `ctrl+x` then `tab` to move the keyboard into the band.
 The agent is also told which guards are on, so it doesn't keep walking into them. Guards are a convenience, not a sandbox: the read-only check matches common commands, and a determined script could still write files.
 
 Under the hood, a guard is a `tool.check` hook (the permission decision) and pins are a `prompt.compose` section. Toggling either changes the system prompt, which costs one prompt-cache miss on the next request.
+
+## Queue + snippets
+
+In the **Queue** tab (`q`), type follow-ups while the agent works: "then add tests", "then update the README". With **Send the next one when the agent finishes** on (the default), each time a turn ends normally the next prompt is sent as if you typed it. An interrupted or failed turn doesn't send one, so you stay in control. ▶ sends an item now (it starts as soon as the agent is idle), and ↑ ↓ ✕ reorder or drop items. `/queue <prompt>` adds from the prompt box. The queue lasts for the session.
+
+**Snippets** are the one-click prompts in the band's second row. Clicking one inserts its text into your prompt box for you to edit or send. Three come built in (Run tests & fix, Commit, Explain diff). Add your own in the Queue tab or with `/snippet Lint: run the linter and fix`. Snippets are saved per project.
 
 ## Ask aside
 
@@ -70,11 +81,14 @@ Or from a clone: `claude --plugin-dir ./flowpane`. To load it everywhere, includ
 
 | Command | Does |
 | --- | --- |
-| `/flow` | Opens or closes the panel. `/flow pins` and `/flow ask` open a tab |
+| `/flow` | Opens or closes the panel. `/flow pins`, `/flow ask` and `/flow queue` open a tab |
 | `/pin <rule>` | Pins a rule. `/pin` alone lists your pins |
 | `/ask <question>` | Asks aside; the answer shows in the Ask tab |
+| `/queue <prompt>` | Queues a prompt. `/queue` alone lists the queue |
+| `/fence <globs>` | Fences edits to those paths. `/fence off` removes it; `/fence` shows it |
+| `/snippet <label>: <text>` | Adds a one-click prompt to the band |
 
-When the panel has focus, `p` and `a` switch tabs, and `e` and `q` run Explain and Quote on your selection. The panel opens by itself in terminals at least 144 columns wide (turn that off with `autoOpen` in `/config`). The mobile app has no text fields yet, so there you use `/pin` and `/ask`.
+When the panel has focus, `p`, `a` and `q` switch tabs, and `e` runs Explain on your selection. The panel opens by itself in terminals at least 144 columns wide (turn that off with `autoOpen` in `/config`). The mobile app has no text fields yet, so there you use `/pin` and `/ask`.
 
 ## Privacy
 

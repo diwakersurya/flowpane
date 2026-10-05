@@ -72,7 +72,7 @@
   <section class="hero">
     <div>
       <h1>Flow<span>pane</span></h1>
-      <p class="lead">A small side panel for Claude Code. Pin rules the agent keeps through <code>/compact</code>, flip guards live, and ask side questions that never enter the conversation.</p>
+      <p class="lead">A small side panel for Claude Code. Pin rules the agent keeps through <code>/compact</code>, flip guards live, queue follow-up prompts, and ask side questions that never enter the conversation.</p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/diwakersurya/flowpane#install">Install</a>
         <a class="btn" href="https://github.com/diwakersurya/flowpane">GitHub</a>
@@ -82,8 +82,9 @@
     <div class="term" aria-label="Flowpane panel preview">
       <div class="bar"><i></i><i></i><i></i></div>
       <div class="tabs" role="tablist">
-        <button class="tab on" data-v="pins">[Pins <span id="count">2 on</span>]</button>
+        <button class="tab on" data-v="pins">[Pins <span id="count">3 on</span>]</button>
         <button class="tab" data-v="ask">Ask</button>
+        <button class="tab" data-v="queue">Queue 2</button>
       </div>
       <div class="view" id="pins">
         <div class="row">&nbsp;</div>
@@ -91,12 +92,26 @@
         <div class="row"><button class="tog g" data-on="1">● Read-only</button></div>
         <div class="row"><button class="tog g" data-on="0">○ No git push</button></div>
         <div class="row"><button class="tog g" data-on="0">○ Ask before Bash</button></div>
+        <div class="row"><button class="tog g" data-on="0">○ No edits on main</button></div>
+        <div class="row"><button class="tog g" data-on="1">● Secret shield</button></div>
+        <div class="row">● Fence <span class="ag">src/auth/**</span> <span class="dim">✕</span></div>
         <div class="row">&nbsp;</div>
         <div class="row"><b>Pinned rules</b></div>
         <div class="row dim">Sent with every request, kept through /compact.</div>
         <div class="row"><button class="tog p" data-on="1">☑</button> <span>use pnpm, not npm</span></div>
         <div class="row"><button class="tog p" data-on="0">☐</button> <span class="dim">never edit db/migrations</span></div>
         <div class="row field">Pin a rule, e.g. use pnpm, not npm</div>
+      </div>
+      <div class="view" id="queue" hidden>
+        <div class="row">&nbsp;</div>
+        <div class="row" style="color:#fb923c">● Send the next one when the agent finishes</div>
+        <div class="row field">Then… (queued until the agent is idle)</div>
+        <div class="row"><span class="dim">1.</span> then add tests for the guard   <span class="dim">▶ ↓ ✕</span></div>
+        <div class="row"><span class="dim">2.</span> then update the README   <span class="dim">▶ ↑ ✕</span></div>
+        <div class="row">&nbsp;</div>
+        <div class="row"><b>Snippets</b></div>
+        <div class="row"><span class="ag">Run tests &amp; fix</span> <span class="dim">Run the tests and fix any failures.</span></div>
+        <div class="row"><span class="ag">Commit</span> <span class="dim">Commit these changes with a clear message.</span></div>
       </div>
       <div class="view" id="ask" hidden>
         <div class="row field">Ask about this conversation…</div>
@@ -118,8 +133,10 @@
   <h2>Why a mod</h2>
   <div class="grid">
     <div class="card"><h3>Pinned rules</h3><p>Injected into the system prompt, so the agent still follows them after <code>/compact</code> and 200 messages later. Saved per project.</p></div>
-    <div class="card"><h3>Live guards</h3><p>Read-only, No git push, Ask before Bash: one press to switch on or off for this session, enforced at the permission check. Also shown as a one-line band above the prompt.</p></div>
+    <div class="card"><h3>Live guards</h3><p>Read-only, No push, No edits on main, a path fence: one press to switch on or off for this session, enforced at the permission check. Also shown as a band above the prompt.</p></div>
     <div class="card"><h3>Ask aside</h3><p>A forked, tool-free question over the conversation, using its prompt cache. The agent never sees it and its context doesn't grow.</p></div>
+    <div class="card"><h3>Queue + snippets</h3><p>Line up follow-ups while the agent works; each sends itself when a turn ends. One-click prompts sit above the prompt box.</p></div>
+    <div class="card"><h3>Secret shield</h3><p>On by default: blocks .env and key files, and masks tokens in tool output before the model reads them.</p></div>
     <div class="card"><h3>Selection</h3><p>Select text in the transcript, then Explain it aside, Quote it into your prompt, or Pin it as a rule.</p></div>
   </div>
 
@@ -135,6 +152,9 @@ claude plugin install flowpane@flowpane</pre>
       <tr><td><code>/flow</code></td><td>Opens or closes the panel. <code>/flow pins</code> and <code>/flow ask</code> open a tab</td></tr>
       <tr><td><code>/pin &lt;rule&gt;</code></td><td>Pins a rule. <code>/pin</code> alone lists your pins</td></tr>
       <tr><td><code>/ask &lt;question&gt;</code></td><td>Asks aside; the answer shows in the panel</td></tr>
+      <tr><td><code>/queue &lt;prompt&gt;</code></td><td>Queues a prompt for when the agent is idle</td></tr>
+      <tr><td><code>/fence &lt;globs&gt;</code></td><td>Fences edits to those paths; <code>/fence off</code> removes it</td></tr>
+      <tr><td><code>/snippet &lt;label&gt;: &lt;text&gt;</code></td><td>Adds a one-click prompt to the band</td></tr>
     </table>
   </div>
 

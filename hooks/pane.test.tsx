@@ -18,6 +18,9 @@ function world(on: On) {
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   on('ui.panes', () => ({ value: [] }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'base', scope: 'shared' as const }] }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.id', () => ({ value: 's1' }))
   return clock
 }
 
@@ -140,4 +143,93 @@ test('the band can be turned off in settings', { options: { band: false } }, asy
   })
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await band.find({ key: 'band-readOnly' })).toBeUndefined()
+})
+
+test('queue: sends the next prompt as the user when a turn ends, and on ▶', async ($, on) => {
+  const clock = world(on)
+  const sent: { text: string }[] = []
+  on('prompt.submit', (_$, e) => {
+    sent.push({ text: e.text })
+    return { text: e.text }
+  })
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-queue' })
+  await ui.input({ key: 'enqueue', text: 'then add tests' })
+  await ui.input({ key: 'enqueue', text: 'then update README' })
+  expect(await ui.find({ key: 'tab-queue', text: /Queue 2/ })).toBeDefined()
+
+  await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  await clock.advance(1)
+  expect(sent).toEqual([{ text: 'then add tests' }])
+
+  await $.turn.complete({ answer: 'stopped', durationMs: 1, isAborted: true, turnId: 't2', reason: 'aborted' })
+  expect(sent.length).toBe(1)
+
+  const send = (await ui.findAll({ type: 'Button', text: '▶' }))[0] as { key: string }
+  await ui.press({ key: send.key })
+  expect(sent.map(s => s.text)).toEqual(['then add tests', 'then update README'])
+  expect(await ui.find({ text: 'Nothing queued.' })).toBeDefined()
+})
+
+test('band: snippets fill the prompt; fence and queue show', async ($, on) => {
+  world(on)
+  const filled: string[] = []
+  on('prompt.fill', (_$, e) => {
+    filled.push(e.text)
+    return { isFilled: true as const }
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await pane.input({ key: 'fence', text: 'src/auth/**' })
+  expect(await pane.find({ text: 'src/auth/**' })).toBeDefined()
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ text: /fence src\/auth\/\*\*/ })).toBeDefined()
+  await band.press({ key: 'snip-s-test' })
+  expect(filled).toEqual(['Run the tests and fix any failures.'])
+
+  const oneRow = await $.ui.mount({ ...BAND, surface: 'terminal', props: { ...BAND.props, maxRows: 1 } })
+  expect(await oneRow.find({ key: 'snip-s-test' })).toBeUndefined()
+
+  await pane.press({ key: 'tab-queue' })
+  await pane.input({ key: 'new-snippet', text: 'Lint: run the linter and fix' })
+  expect(await band.find({ text: '[Lint]' })).toBeDefined()
+})
+
+test('fence and no-main decide tool checks', async ($, on) => {
+  world(on)
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: 'main\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  const r = await $.command.run({ command: 'fence', args: 'src/auth/**', origin: { kind: 'composer' } as never, presentation: { isFullscreen: true, columns: 160 } as never })
+  expect(r.text).toContain('src/auth/**')
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: '/repo/src/db/x.ts' } })).decision).toBe('deny')
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: '/repo/src/auth/x.ts' } })).decision).toBe('allow')
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'band-noMain' })
+  expect((await $.tool.check({ tool: 'Edit', input: { file_path: '/repo/src/auth/x.ts' } })).decision).toBe('deny')
+  // Inside a fence, a command that changes the tree still needs a look; with the fence off, branching is free.
+  expect((await $.tool.check({ tool: 'Bash', input: { command: 'git switch -c feat' } })).decision).toBe('ask')
+  await $.command.run({ command: 'fence', args: 'off', origin: { kind: 'composer' } as never, presentation: { isFullscreen: true, columns: 160 } as never })
+  expect((await $.tool.check({ tool: 'Bash', input: { command: 'git switch -c feat' } })).decision).toBe('allow')
+  expect((await $.tool.check({ tool: 'Bash', input: { command: 'rm -rf src' } })).decision).toBe('deny')
+})
+
+test('secret shield starts on, blocks .env, masks tokens in results', async ($, on) => {
+  world(on)
+  on('tool.check', () => ({ decision: 'allow' as const }))
+  on('tool.call', () => ({ result: { stdout: 'OPENAI_API_KEY=sk-' + 'x'.repeat(30) + '\nok', stderr: '', interrupted: false } }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: false })
+
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ key: 'band-secrets', text: '● Secrets' })).toBeDefined()
+  expect((await $.tool.check({ tool: 'Read', input: { file_path: '/repo/.env' } })).decision).toBe('deny')
+  const r = await $.tool.call({ tool: 'Bash', command: 'node print.js', tool_use_id: 'b1' })
+  expect(JSON.stringify(r.result)).toContain('«redacted:api-key»')
+  expect(JSON.stringify(r.result)).not.toContain('xxxxxxxx')
+
+  await band.press({ key: 'band-secrets' })
+  const raw = await $.tool.call({ tool: 'Bash', command: 'node print.js', tool_use_id: 'b2' })
+  expect(JSON.stringify(raw.result)).toContain('xxxxxxxx')
 })

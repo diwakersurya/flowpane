@@ -1,7 +1,7 @@
 {
   "name": "flowpane",
-  "version": "1.1.0",
-  "description": "Side panel for Claude Code: pin rules the model keeps through /compact, flip live guards (read-only, no push, ask before Bash), and ask side questions that never enter the conversation",
+  "version": "1.2.0",
+  "description": "Side panel for Claude Code: pin rules the model keeps through /compact, flip live guards (read-only, no push, no edits on main, fence, secret shield), queue prompts, one-click snippets, and ask side questions that never enter the conversation",
   "author": {
     "name": "Diwaker Singh",
     "url": "https://github.com/diwakersurya"
@@ -18,6 +18,12 @@
       "type": "boolean",
       "title": "Guard band",
       "description": "Show the guard switches in a row above the prompt",
+      "default": true
+    },
+    "secretShield": {
+      "type": "boolean",
+      "title": "Secret shield on at start",
+      "description": "Start each session with the secret shield on (blocks .env/key files, masks tokens in tool output)",
       "default": true
     }
   },
