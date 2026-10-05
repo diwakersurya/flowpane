@@ -20,9 +20,6 @@ A small side panel for Claude Code that does two things no status line or hook c
 │ ☑ use pnpm, not npm               ✕   │
 │ ☐ never edit db/migrations        ✕   │
 │ [ Pin a rule, e.g. use pnpm…   ]      │
-│                               /\_/\   │
-│                              (<.<  )  │
-│                               > ^ <   │
 ╰───────────────────────────────────────╯
 ```
 
@@ -69,8 +66,6 @@ Or from a clone: `claude --plugin-dir ./flowpane`. To load it everywhere, includ
 | `/ask <question>` | Asks aside; the answer shows in the Ask tab |
 
 When the panel has focus, `p` and `a` switch tabs, and `e` and `q` run Explain and Quote on your selection. The panel opens by itself in terminals at least 144 columns wide (turn that off with `autoOpen` in `/config`). The mobile app has no text fields yet, so there you use `/pin` and `/ask`.
-
-And yes, the cat turns its head toward the tab you pick.
 
 ## Privacy
 

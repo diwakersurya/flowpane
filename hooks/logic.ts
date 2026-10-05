@@ -1,6 +1,6 @@
-// Pure logic: the pinned-rules prompt section, guard verdicts, the cat.
+// Pure logic: the pinned-rules prompt section and guard verdicts.
 // No `$`, so tests run it directly.
-import type { Guards, Pin, Tab } from '../types'
+import type { Guards, Pin } from '../types'
 
 export const clip = (text: string, max: number) => {
   const one = text.replace(/\s+/g, ' ').trim()
@@ -83,19 +83,3 @@ Question: ${question}`
 export const explainQuestion = (selection: string) => `Explain this part of our conversation: “${clip(selection, 1500)}”`
 
 export const quote = (text: string) => text.replace(/^/gm, '> ') + '\n\n'
-
-// ── the cat ────────────────────────────────────────────────────────
-
-/** Where the cat looks: left at Pins, right at Ask. */
-export const PET_TARGET: Record<Tab, number> = { pins: -2, ask: 2 }
-
-const EYES: Record<number, string> = { [-2]: '<.<  ', [-1]: 'o.o  ', 0: ' o.o ', 1: '  o.o', 2: '  >.>' }
-
-/** The cat at a head position: three rows, seven columns; ears follow the head. */
-export function petFrame(pos: number): [string, string, string] {
-  const p = Math.max(-2, Math.min(2, Math.round(pos)))
-  const ears = p < 0 ? '/\\_/\\  ' : p > 0 ? '  /\\_/\\' : ' /\\_/\\ '
-  return [ears, `(${EYES[p]})`, ' > ^ < ']
-}
-
-export const stepToward = (pos: number, target: number) => pos + Math.sign(target - pos)

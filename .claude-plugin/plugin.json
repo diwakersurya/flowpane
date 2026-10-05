@@ -1,6 +1,6 @@
 {
   "name": "flowpane",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Side panel for Claude Code: pin rules the model keeps through /compact, flip live guards (read-only, no push, ask before Bash), and ask side questions that never enter the conversation",
   "author": {
     "name": "Diwaker Singh",

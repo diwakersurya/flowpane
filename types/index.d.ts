@@ -24,8 +24,6 @@ declare module 'claude-code' {
       guards: Guards
       asks: Ask[]
       tab: Tab
-      /** The cat's head: -2 looking left (Pins) … 2 looking right (Ask). */
-      petPos: number
     }
   }
 }

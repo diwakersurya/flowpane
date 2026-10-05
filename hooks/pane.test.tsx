@@ -59,8 +59,8 @@ test('guards flip from the pane and decide tool checks', async ($, on) => {
   expect((await $.tool.check({ tool: 'Write', input: { file_path: '/repo/a' } })).decision).toBe('deny')
 })
 
-test('ask aside answers from a fork, inserts into the prompt, and the cat looks right', async ($, on) => {
-  const clock = world(on)
+test('ask aside answers from a fork and inserts into the prompt', async ($, on) => {
+  world(on)
   const filled: string[] = []
   on('model.fork', (_$, e) => ({ value: { isAnswered: true as const, text: `It was src/auth.ts. (${e.prompt.includes('Question: which file?') ? 'q' : '?'})`, usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } }))
   on('prompt.fill', (_$, e) => {
@@ -71,8 +71,6 @@ test('ask aside answers from a fork, inserts into the prompt, and the cat looks 
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'tab-ask' })
-  await clock.advance(90 * 4)
-  expect(await ui.find({ type: 'Text', text: '>.>' })).toBeDefined()
 
   await ui.input({ key: 'ask', text: 'which file?' })
   expect(await ui.find({ text: /It was src\/auth\.ts\. \(q\)/ })).toBeDefined()

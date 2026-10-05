@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { guardVerdict, mutates, NO_GUARDS, petFrame, pinsSection, quote, stepToward } from './logic'
+import { guardVerdict, mutates, NO_GUARDS, pinsSection, quote } from './logic'
 
 test('pins section lists only what is on', async () => {
   expect(pinsSection([], NO_GUARDS)).toBeUndefined()
@@ -38,8 +38,6 @@ test('guards deny or ask; nothing when off', async () => {
   expect(guardVerdict({ readOnly: true, noPush: false, askBash: true }, 'Bash', { command: 'rm a' })?.decision).toBe('deny')
 })
 
-test('quote and cat', async () => {
+test('quote', async () => {
   expect(quote('a\nb')).toBe('> a\n> b\n\n')
-  for (const p of [-2, -1, 0, 1, 2]) expect(petFrame(p).every(l => l.length === 7)).toBe(true)
-  expect(stepToward(-2, 2)).toBe(-1)
 })

@@ -1,23 +1,19 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer, UiPressArgument } from 'claude-code'
+import type { EngineInterface, Register, UiPressArgument } from 'claude-code'
 
 import type { Ask, Guards, Pin, Tab } from '../types'
-import { askPrompt, clip, explainQuestion, guardVerdict, GUARD_LABEL, NO_GUARDS, PET_TARGET, petFrame, pinsSection, quote, stepToward } from './logic'
-import { AskTab, guard, Header, Pet, petSvg, PinsTab } from './views'
+import { askPrompt, clip, explainQuestion, guardVerdict, GUARD_LABEL, NO_GUARDS, pinsSection, quote } from './logic'
+import { AskTab, guard, Header, PinsTab } from './views'
 
 const PANE = 'flowpane'
 const TITLE = 'Flowpane'
-const PET_STEP_MS = 90
 
 const pins = atom({ plugin: 'flowpane', key: 'pins' } as const, [] as Pin[])
 const guards = atom({ plugin: 'flowpane', key: 'guards' } as const, NO_GUARDS)
 const asks = atom({ plugin: 'flowpane', key: 'asks' } as const, [] as Ask[])
 const tab = atom({ plugin: 'flowpane', key: 'tab' } as const, 'pins' as Tab)
-const petPos = atom({ plugin: 'flowpane', key: 'petPos' } as const, PET_TARGET.pins)
 
 type $ = EngineInterface
-
-let petTimer: Timer | undefined
 
 // ── pins: per project, mirrored to the store ───────────────────────
 
@@ -77,25 +73,8 @@ async function useSelection($: $, action: 'explain' | 'quote' | 'pin') {
   }
 }
 
-// ── tabs and the cat ───────────────────────────────────────────────
-
-/** Switches tab and turns the cat's head toward it, one frame per step. */
 async function setTab($: $, next: Tab) {
   await update($, tab, () => next)
-  petTimer?.cancel()
-  const target = PET_TARGET[next]
-  petTimer = $.clock.every(PET_STEP_MS, () => {
-    void stepPet($, target)
-  })
-}
-
-async function stepPet($: $, target: number) {
-  const pos = await read($, petPos)
-  if (pos === target) {
-    petTimer?.cancel()
-    return
-  }
-  await update($, petPos, p => stepToward(p, target))
 }
 
 function openPane($: $) {
@@ -177,7 +156,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const els = $.ui.resolve(e)
     const Input = e.surface === 'mobile' ? undefined : $.ui.resolve(e).Input
-    const [ps, gs, as, savedTab, pos] = await Promise.all([read($, pins), read($, guards), read($, asks), read($, tab), read($, petPos)])
+    const [ps, gs, as, savedTab] = await Promise.all([read($, pins), read($, guards), read($, asks), read($, tab)])
     // A tab saved by an older version (flow, changes…) falls back to Pins.
     const current: Tab = savedTab === 'ask' ? 'ask' : 'pins'
 
@@ -213,12 +192,6 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" marginTop={1}>
           {body}
         </Box>
-        {guard(els, 'pet', () => {
-          const frame = petFrame(pos)
-          if (e.surface === 'terminal') return Pet(els, { frame })
-          const { Svg } = $.ui.resolve(e)
-          return Pet(els, { frame, svg: <Svg source={petSvg(frame)} alt="Flowpane cat" width={64} height={50} /> })
-        })}
       </Box>
     )
   })
