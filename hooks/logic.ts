@@ -15,6 +15,9 @@ export const GUARD_LABEL: Record<keyof Guards, string> = {
   askBash: 'Ask before Bash',
 }
 
+/** The band's labels, short enough for one row. */
+export const GUARD_SHORT: Record<keyof Guards, string> = { readOnly: 'Read-only', noPush: 'No push', askBash: 'Ask Bash' }
+
 const GUARD_RULE: Record<keyof Guards, string> = {
   readOnly: 'Read-only: do not edit, create or delete files, and do not run commands that change them. Investigate and propose changes instead.',
   noPush: 'No git push: commit if asked, but never push.',

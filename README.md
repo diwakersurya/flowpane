@@ -35,6 +35,15 @@ A small side panel for Claude Code that does two things no status line or hook c
 | No git push | Blocks `git push`. Commits still work |
 | Ask before Bash | Every shell command goes through Claude Code's own permission prompt, even ones your settings would allow |
 
+The guards also sit in a one-line **band above the prompt**, so you can see and flip them without opening the panel:
+
+```
+guards  ● Read-only  ○ No push  ○ Ask Bash  · 2 pins on
+❯ _
+```
+
+Click a switch, or press `ctrl+x` then `tab` to move the keyboard into the band. The band and the panel share the same switches. It hides while Claude Code shows a survey, and `band` in `/config` turns it off.
+
 The agent is also told which guards are on, so it doesn't keep walking into them. Guards are a convenience, not a sandbox: the read-only check matches common commands, and a determined script could still write files.
 
 Under the hood, a guard is a `tool.check` hook (the permission decision) and pins are a `prompt.compose` section. Toggling either changes the system prompt, which costs one prompt-cache miss on the next request.

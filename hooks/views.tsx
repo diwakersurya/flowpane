@@ -1,7 +1,7 @@
 import type { Elements, RenderNode, UiPressArgument } from 'claude-code'
 
 import type { Ask, Guards, Pin, Tab } from '../types'
-import { GUARD_LABEL } from './logic'
+import { GUARD_LABEL, GUARD_SHORT } from './logic'
 
 /** What every surface draws. */
 export type Common = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Markdown'>
@@ -134,6 +134,26 @@ export function AskTab(
           </Box>
         </Box>
       ))}
+    </Box>
+  )
+}
+
+/** One row above the prompt: the guards as switches, and how many pins are on. */
+export function Band({ Box, Text, Button }: Common, p: { guards: Guards; pinsOn: number; onGuard: (k: keyof Guards) => void }) {
+  return (
+    <Box gap={1}>
+      <Text dimColor>guards</Text>
+      {(Object.keys(GUARD_SHORT) as (keyof Guards)[]).map(k => (
+        <Button
+          key={`band-${k}`}
+          plain
+          label={`${p.guards[k] ? '●' : '○'} ${GUARD_SHORT[k]}`}
+          variant={p.guards[k] ? 'primary' : undefined}
+          dimColor={!p.guards[k]}
+          onPress={() => p.onGuard(k)}
+        />
+      ))}
+      {p.pinsOn > 0 && <Text dimColor>· {p.pinsOn} pin{p.pinsOn === 1 ? '' : 's'} on</Text>}
     </Box>
   )
 }

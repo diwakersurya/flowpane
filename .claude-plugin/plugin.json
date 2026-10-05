@@ -1,6 +1,6 @@
 {
   "name": "flowpane",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Side panel for Claude Code: pin rules the model keeps through /compact, flip live guards (read-only, no push, ask before Bash), and ask side questions that never enter the conversation",
   "author": {
     "name": "Diwaker Singh",
@@ -12,6 +12,12 @@
       "type": "boolean",
       "title": "Open at startup",
       "description": "Open the Flowpane pane when a session starts (seats from 144 terminal columns)",
+      "default": true
+    },
+    "band": {
+      "type": "boolean",
+      "title": "Guard band",
+      "description": "Show the guard switches in a row above the prompt",
       "default": true
     }
   },

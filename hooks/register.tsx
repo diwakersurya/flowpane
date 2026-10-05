@@ -3,7 +3,7 @@ import type { EngineInterface, Register, UiPressArgument } from 'claude-code'
 
 import type { Ask, Guards, Pin, Tab } from '../types'
 import { askPrompt, clip, explainQuestion, guardVerdict, GUARD_LABEL, NO_GUARDS, pinsSection, quote } from './logic'
-import { AskTab, guard, Header, PinsTab } from './views'
+import { AskTab, Band, guard, Header, PinsTab } from './views'
 
 const PANE = 'flowpane'
 const TITLE = 'Flowpane'
@@ -71,6 +71,12 @@ async function useSelection($: $, action: 'explain' | 'quote' | 'pin') {
   } else {
     await askAside($, explainQuestion(sel.text))
   }
+}
+
+async function toggleGuard($: $, k: keyof Guards) {
+  const was = (await read($, guards))[k]
+  await update($, guards, g => ({ ...g, [k]: !g[k] }))
+  $.ui.toast(`${GUARD_LABEL[k]} ${was ? 'off' : 'on'}`)
 }
 
 async function setTab($: $, next: Tab) {
@@ -153,6 +159,15 @@ export const register: Register = (on, options) => {
 
   // ── drawing ──────────────────────────────────────────────────────
 
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (options.band === false || e.props.hasSurvey) return next(e)
+    const [gs, ps] = await Promise.all([read($, guards), read($, pins)])
+    const els = $.ui.resolve(e)
+    const onGuard = (k: keyof Guards) => void toggleGuard($, k)
+    return <els.Box>{guard(els, 'band', () => Band(els, { guards: gs, pinsOn: ps.filter(p => p.isOn).length, onGuard }))}</els.Box>
+  })
+
+
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const els = $.ui.resolve(e)
     const Input = e.surface === 'mobile' ? undefined : $.ui.resolve(e).Input
@@ -161,10 +176,7 @@ export const register: Register = (on, options) => {
     const current: Tab = savedTab === 'ask' ? 'ask' : 'pins'
 
     const onTab = (next: Tab) => void setTab($, next)
-    const onGuard = (k: keyof Guards) => {
-      void update($, guards, g => ({ ...g, [k]: !g[k] }))
-      $.ui.toast(`${GUARD_LABEL[k]} ${gs[k] ? 'off' : 'on'}`)
-    }
+    const onGuard = (k: keyof Guards) => void toggleGuard($, k)
     const onAdd = (text: string) => void addPin($, text)
     const onTogglePin = (id: string) => void setPins($, list => list.map(p => (p.id === id ? { ...p, isOn: !p.isOn } : p)))
     const onRemovePin = (id: string) => void setPins($, list => list.filter(p => p.id !== id))
