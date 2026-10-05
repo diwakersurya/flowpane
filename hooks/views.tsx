@@ -1,181 +1,141 @@
 import type { Elements, RenderNode, UiPressArgument } from 'claude-code'
 
-import type { ContextFill, Decision, FlowNode, Question, Tab, Todo } from '../types'
-import { bar, buildRows, clip, duration, ICON, kilo } from './model'
+import type { Ask, Guards, Pin, Tab } from '../types'
+import { GUARD_LABEL } from './logic'
 
-/** The elements every surface draws: what the shared views are built from. */
-export type Common = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
+/** What every surface draws. */
+export type Common = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Markdown'>
+/** `Input` is on every surface but mobile; absent there, the views say how to do it by command. */
+export type Field = Elements['terminal']['Input'] | undefined
 
-const TAB_NAMES: Record<Tab, string> = { flow: 'Flow', changes: 'Changes', todos: 'Todos', decisions: 'Decisions' }
-const HOTKEY: Record<Tab, string> = { flow: 'f', changes: 'c', todos: 't', decisions: 'd' }
+const TABS: { tab: Tab; label: string; hotkey: string }[] = [
+  { tab: 'pins', label: 'Pins', hotkey: 'p' },
+  { tab: 'ask', label: 'Ask', hotkey: 'a' },
+]
 
-export function Header(
-  { Box, Text, Button }: Common,
-  p: {
-    tab: Tab
-    todos: readonly Todo[]
-    decisions: readonly Decision[]
-    changes: { files: number; isFailing: boolean }
-    context: ContextFill | null
-    width: number
-    onTab: (t: Tab) => void
-  },
-) {
-  const done = p.todos.filter(t => t.status === 'completed').length
+export function Header({ Box, Button }: Common, p: { tab: Tab; pinsOn: number; guardsOn: number; onTab: (t: Tab) => void }) {
   const badge: Record<Tab, string> = {
-    flow: '',
-    changes: p.changes.isFailing ? ' ✗' : p.changes.files ? ` ${p.changes.files}` : '',
-    todos: p.todos.length ? ` ${done}/${p.todos.length}` : '',
-    decisions: p.decisions.length ? ` ${p.decisions.length}` : '',
+    pins: p.pinsOn + p.guardsOn ? ` ${p.pinsOn + p.guardsOn} on` : '',
+    ask: '',
   }
-  const ctx = p.context
-  const barWidth = Math.max(4, Math.min(16, p.width - 22))
   return (
-    <Box flexDirection="column">
-      <Box gap={1}>
-        {(Object.keys(TAB_NAMES) as Tab[]).map(t => (
-          <Button
-            key={`tab-${t}`}
-            label={TAB_NAMES[t] + badge[t]}
-            hotkey={HOTKEY[t]}
-            variant={t === p.tab ? 'primary' : undefined}
-            dimColor={t !== p.tab}
-            onPress={() => p.onTab(t)}
-          />
-        ))}
-      </Box>
-      {ctx ? (
-        <Text dimColor wrap="truncate">
-          ctx <Text color={ctx.percent >= 80 ? 'red' : ctx.percent >= 60 ? 'yellow' : 'green'}>{bar(ctx.used, ctx.window, barWidth)}</Text>{' '}
-          {kilo(ctx.used)} / {kilo(ctx.window)} · {kilo(Math.max(0, ctx.window - ctx.used))} left
-        </Text>
-      ) : (
-        <Text dimColor>ctx —</Text>
-      )}
-    </Box>
-  )
-}
-
-const STATUS_COLOR = { running: 'yellow', done: 'green', error: 'red', denied: 'gray' } as const
-
-export function FlowList(
-  { Box, Text, Button }: Common,
-  p: { nodes: readonly FlowNode[]; toggled: readonly string[]; now: number; width: number; room: number; onToggle: (id: string) => void },
-) {
-  const rows = buildRows(p.nodes, p.toggled).slice(0, Math.max(3, p.room))
-  if (rows.length === 0) return <Text dimColor>Waiting for the first turn…</Text>
-  return (
-    <Box flexDirection="column">
-      {rows.map(({ node, depth, isOpen, count }) => {
-        const pad = '  '.repeat(depth)
-        const caret = isOpen === undefined ? ' ' : isOpen ? '▼' : '▸'
-        if (node.kind === 'turn') {
-          const meta = isOpen ? duration(node, p.now) : `${count} calls · ${duration(node, p.now)}`
-          return (
-            <Button
-              key={`row-${node.id}`}
-              plain
-              label={clip(`${caret} Turn ${node.n ?? ''} "${node.label}"  ${meta}${node.status === 'running' ? ' ●' : ''}`, p.width)}
-              onPress={() => p.onToggle(node.id)}
-            />
-          )
-        }
-        const icon = node.kind === 'agent' ? '◆' : ICON[node.status]
-        const tail = node.kind === 'agent' && count ? `  ${count}` : node.status === 'running' ? '  running' : ''
-        const text = clip(`${pad}${caret} ${icon} ${node.label}${tail}`, p.width)
-        return isOpen !== undefined ? (
-          <Button key={`row-${node.id}`} plain label={text} onPress={() => p.onToggle(node.id)} />
-        ) : (
-          <Text color={node.kind === 'agent' ? 'cyan' : STATUS_COLOR[node.status]} dimColor={node.status === 'done'} wrap="truncate">
-            {text}
-          </Text>
-        )
-      })}
-    </Box>
-  )
-}
-
-export function LastDecision({ Box, Text }: Common, p: { decision: Decision | undefined; width: number }) {
-  if (!p.decision) return null
-  return (
-    <Box flexDirection="column" marginTop={1}>
-      <Text color="magenta" wrap="truncate">
-        ◆ {clip(p.decision.choice, p.width - 2)}
-      </Text>
-      {p.decision.why && (
-        <Text dimColor wrap="wrap">
-          {'  '}
-          {p.decision.why}
-        </Text>
-      )}
-    </Box>
-  )
-}
-
-const TODO_ICON = { completed: '✓', in_progress: '●', pending: '○' } as const
-
-export function TodoList({ Box, Text }: Common, p: { todos: readonly Todo[]; width: number }) {
-  if (p.todos.length === 0) return <Text dimColor>No todos yet. They show when the agent plans a task list.</Text>
-  const done = p.todos.filter(t => t.status === 'completed').length
-  return (
-    <Box flexDirection="column">
-      <Text>
-        <Text color="green">{bar(done, p.todos.length, Math.max(4, Math.min(20, p.width - 10)))}</Text> {done}/{p.todos.length}
-      </Text>
-      {p.todos.map(t => (
-        <Text
-          color={t.status === 'in_progress' ? 'yellow' : undefined}
-          dimColor={t.status === 'completed'}
-          bold={t.status === 'in_progress'}
-          wrap="truncate"
-        >
-          {TODO_ICON[t.status]} {t.status === 'in_progress' && t.activeForm ? t.activeForm : t.content}
-        </Text>
+    <Box gap={1}>
+      {TABS.map(t => (
+        <Button
+          key={`tab-${t.tab}`}
+          label={t.label + badge[t.tab]}
+          hotkey={t.hotkey}
+          variant={t.tab === p.tab ? 'primary' : undefined}
+          dimColor={t.tab !== p.tab}
+          onPress={() => p.onTab(t.tab)}
+        />
       ))}
     </Box>
   )
 }
 
-export function DecisionList(
+export function PinsTab(
   { Box, Text, Button }: Common,
-  p: { decisions: readonly Decision[]; nodes: readonly FlowNode[]; width: number; onJump: (turnId: string) => void },
+  Input: Field,
+  p: {
+    pins: readonly Pin[]
+    guards: Guards
+    onGuard: (k: keyof Guards) => void
+    onAdd: (text: string) => void
+    onToggle: (id: string) => void
+    onRemove: (id: string) => void
+  },
 ) {
-  if (p.decisions.length === 0) return <Text dimColor>No decisions logged yet.</Text>
-  const turnNo = new Map(p.nodes.filter(n => n.kind === 'turn').map(n => [n.id, n.n]))
   return (
-    <Box flexDirection="column" gap={1}>
-      {[...p.decisions].reverse().map(d => (
-        <Box flexDirection="column">
-          <Text bold wrap="wrap">
-            {d.source === 'inferred' ? '~ ' : '◆ '}
-            {d.choice}
-          </Text>
-          {d.why && <Text dimColor wrap="wrap">{d.why}</Text>}
-          {d.alternatives?.length ? (
-            <Text dimColor strikethrough wrap="truncate">
-              {d.alternatives.join(', ')}
+    <Box flexDirection="column">
+      <Text bold>Guards</Text>
+      <Box flexDirection="column" marginBottom={1}>
+        {(Object.keys(GUARD_LABEL) as (keyof Guards)[]).map(k => (
+          <Button
+            key={`guard-${k}`}
+            plain
+            label={`${p.guards[k] ? '●' : '○'} ${GUARD_LABEL[k]}`}
+            variant={p.guards[k] ? 'primary' : undefined}
+            onPress={() => p.onGuard(k)}
+          />
+        ))}
+      </Box>
+      <Text bold>Pinned rules</Text>
+      <Text dimColor wrap="wrap">
+        Sent with every request while on, and kept through /compact.
+      </Text>
+      {p.pins.length === 0 && <Text dimColor>None yet.</Text>}
+      {p.pins.map(pin => (
+        <Box gap={1}>
+          <Button key={`pin-${pin.id}`} plain label={pin.isOn ? '☑' : '☐'} onPress={() => p.onToggle(pin.id)} />
+          <Box flexGrow={1}>
+            <Text dimColor={!pin.isOn} wrap="wrap">
+              {pin.text}
             </Text>
-          ) : null}
-          {turnNo.has(d.turnId) && (
-            <Button key={`jump-${d.id}`} plain dimColor label={`→ turn ${turnNo.get(d.turnId)}`} onPress={() => p.onJump(d.turnId)} />
+          </Box>
+          <Button key={`unpin-${pin.id}`} plain dimColor label="✕" onPress={() => p.onRemove(pin.id)} />
+        </Box>
+      ))}
+      <Box marginTop={1}>
+        {Input ? (
+          <Input key="new-pin" placeholder="Pin a rule, e.g. use pnpm, not npm" submitLabel="Pin" onSubmit={text => p.onAdd(text)} />
+        ) : (
+          <Text dimColor>No text fields here yet: add pins with /pin &lt;rule&gt;.</Text>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+export function AskTab(
+  { Box, Text, Button, Markdown }: Common,
+  Input: Field,
+  p: {
+    asks: readonly Ask[]
+    onAsk: (q: string) => void
+    onSelection: (action: 'explain' | 'quote' | 'pin', press: UiPressArgument) => void
+    onInsert: (id: string) => void
+    onRemove: (id: string) => void
+  },
+) {
+  return (
+    <Box flexDirection="column">
+      {Input ? (
+        <Input key="ask" placeholder="Ask about this conversation…" submitLabel="Ask" onSubmit={q => p.onAsk(q)} />
+      ) : (
+        <Text dimColor>No text fields here yet: ask with /ask &lt;question&gt;.</Text>
+      )}
+      <Text dimColor wrap="wrap">
+        Answered from the conversation without adding to it or interrupting the agent.
+      </Text>
+      <Box gap={1} marginTop={1} flexWrap="wrap">
+        <Text dimColor>Selection:</Text>
+        <Button key="sel-explain" label="Explain" hotkey="e" onPress={press => p.onSelection('explain', press)} />
+        <Button key="sel-quote" label="Quote" hotkey="q" onPress={press => p.onSelection('quote', press)} />
+        <Button key="sel-pin" label="Pin" onPress={press => p.onSelection('pin', press)} />
+      </Box>
+      {[...p.asks].reverse().map(a => (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold wrap="wrap">
+            ? {a.question}
+          </Text>
+          {a.status === 'thinking' ? (
+            <Text color="yellow">… thinking</Text>
+          ) : a.status === 'error' ? (
+            <Text color="red" wrap="wrap">
+              ✗ {a.answer}
+            </Text>
+          ) : (
+            <Markdown text={a.answer ?? ''} />
           )}
+          <Box gap={1}>
+            {a.status === 'done' && <Button key={`insert-${a.id}`} plain label="↳ Insert into prompt" onPress={() => p.onInsert(a.id)} />}
+            <Button key={`drop-${a.id}`} plain dimColor label="✕" onPress={() => p.onRemove(a.id)} />
+          </Box>
         </Box>
       ))}
     </Box>
   )
-}
-
-/** Draws one view, an inline error line in its place if it throws, so the other tabs keep working. */
-export function guard({ Text }: Common, name: string, draw: () => RenderNode | null): RenderNode | null {
-  try {
-    return draw()
-  } catch (err) {
-    return (
-      <Text color="red" wrap="wrap">
-        ✗ couldn't draw {name}: {err instanceof Error ? err.message : String(err)}
-      </Text>
-    )
-  }
 }
 
 /** The cat, bottom right. Text on the terminal; an SVG elsewhere, where Text may not be monospace. */
@@ -199,47 +159,15 @@ export function petSvg(frame: readonly string[]): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="50" font-family="ui-monospace,Menlo,monospace" font-size="13" fill="#e0a96d">${rows}</svg>`
 }
 
-/**
- * The questions the agent asked and what was picked, top to bottom. On the
- * terminal drawn with box characters; elsewhere `picture` (an SVG) stands in.
- */
-export function QuestionFlow(
-  { Box, Text, Button }: Common,
-  p: { questions: readonly Question[]; width: number; picture?: RenderNode; onCopy: (press: UiPressArgument) => void },
-) {
-  if (p.questions.length === 0) return null
-  return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Box justifyContent="space-between">
-        <Text bold>Questions</Text>
-        <Button key="copy-mermaid" label="Copy Mermaid" hotkey="m" onPress={p.onCopy} />
-      </Box>
-      {p.picture ??
-        p.questions.map((q, i) => (
-          <Box flexDirection="column">
-            <Text color="#c2410c" bold wrap="truncate">
-              ◇ {q.header}
-            </Text>
-            <Text dimColor wrap="truncate">
-              │ {clip(q.question, p.width - 2)}
-            </Text>
-            <Text wrap="truncate">
-              │{'  '}
-              {q.status === 'answered' ? (
-                <Text color="green">✓ {[...q.chosen, ...(q.other ? [`“${q.other}”`] : [])].join(' + ')}</Text>
-              ) : (
-                <Text color="yellow">{q.status === 'waiting' ? '… waiting for answer' : '⊘ declined'}</Text>
-              )}
-              <Text dimColor>
-                {q.options
-                  .filter(o => !q.chosen.includes(o))
-                  .map(o => `  · ${o}`)
-                  .join('')}
-              </Text>
-            </Text>
-            {i + 1 < p.questions.length && <Text dimColor>▼</Text>}
-          </Box>
-        ))}
-    </Box>
-  )
+/** Draws one view, an inline error line in its place if it throws. */
+export function guard({ Text }: Common, name: string, draw: () => RenderNode | null): RenderNode | null {
+  try {
+    return draw()
+  } catch (err) {
+    return (
+      <Text color="red" wrap="wrap">
+        ✗ couldn't draw {name}: {err instanceof Error ? err.message : String(err)}
+      </Text>
+    )
+  }
 }

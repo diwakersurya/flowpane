@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flowpane</title>
-<meta name="description" content="A live side panel for Claude Code: flow, todos and decisions while the agent works.">
+<meta name="description" content="A side panel for Claude Code: pin rules the model keeps, flip live guards, and ask side questions that never enter the conversation.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -60,13 +60,20 @@
   footer { margin-top: 64px; color: var(--muted); font-size: 14px; }
   a { color: var(--accent); }
 </style>
+<style>
+  .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0; }
+  .chip { color: var(--term-dim); } .chip.on { color: #fb923c; }
+  .field { border: 1px solid #3a3842; border-radius: 4px; padding: 0 6px; color: var(--term-dim); margin-top: 6px; }
+  .tog { cursor: pointer; background: none; border: 0; font: inherit; color: inherit; padding: 0; text-align: left; }
+  .cat { background: none; border: 0; padding: 0; margin: 8px 0 0; text-align: right; color: #e0a96d; font-size: 13px; line-height: 1.3; }
+</style>
 </head>
 <body>
 <main>
   <section class="hero">
     <div>
       <h1>Flow<span>pane</span></h1>
-      <p class="lead">A live side panel for Claude Code. See what the agent is doing, what's left, and why it chose what it chose, without scrolling the transcript.</p>
+      <p class="lead">A small side panel for Claude Code. Pin rules the agent keeps through <code>/compact</code>, flip guards live, and ask side questions that never enter the conversation.</p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/diwakersurya/flowpane#install">Install</a>
         <a class="btn" href="https://github.com/diwakersurya/flowpane">GitHub</a>
@@ -76,119 +83,71 @@
     <div class="term" aria-label="Flowpane panel preview">
       <div class="bar"><i></i><i></i><i></i></div>
       <div class="tabs" role="tablist">
-        <button class="tab on" data-v="flow">[Flow]</button>
-        <button class="tab" data-v="changes">Changes 4</button>
-        <button class="tab" data-v="todos">Todos 3/7</button>
-        <button class="tab" data-v="decisions">Decisions 4</button>
+        <button class="tab on" data-v="pins">[Pins <span id="count">2 on</span>]</button>
+        <button class="tab" data-v="ask">Ask</button>
       </div>
-      <div class="row dim">ctx <span class="ok">███████</span>░░░░░ 112k / 200k · 88k left</div>
-      <div class="view" id="flow">
-        <div class="row" style="display:flex;justify-content:space-between"><b>Questions</b><span class="dim">[ Copy Mermaid ]</span></div>
-        <div class="row" style="color:#fb923c">◇ Pet</div>
-        <div class="row dim">│ Which pet should live in the panel?</div>
-        <div class="row">│  <span class="ok">✓ Cat</span><span class="dim">  · Owl  · Tiny bird</span></div>
-        <div class="row dim">▼</div>
-        <div class="row" style="color:#fb923c">◇ Placement</div>
-        <div class="row">│  <span class="ok">✓ Bottom of the panel</span><span class="dim">  · Right of the tabs</span></div>
-        <div class="mini" id="mini" aria-hidden="true"></div>
-        <div class="row">▼ Turn 6 "add auth guard"  41s <span class="run pulse">●</span></div>
-        <div class="row dim">  <span class="ok">✓</span> Read src/router.ts</div>
-        <div class="row dim">  <span class="ok">✓</span> Grep requireAuth</div>
-        <div class="row ag">  ▸ ◆ Explore: find session store  2</div>
-        <div class="row run">  ● Edit src/router.ts  running</div>
-        <div class="row">▸ Turn 5 "write spec"  12 calls · 2m04s</div>
-        <div class="row">▸ Turn 4 "scaffold mod"  8 calls · 1m12s</div>
+      <div class="view" id="pins">
         <div class="row">&nbsp;</div>
-        <div class="row dec">◆ Middleware over per-route guard</div>
-        <div class="row dim">  one place to audit</div>
+        <div class="row"><b>Guards</b></div>
+        <div class="row"><button class="tog g" data-on="1">● Read-only</button></div>
+        <div class="row"><button class="tog g" data-on="0">○ No git push</button></div>
+        <div class="row"><button class="tog g" data-on="0">○ Ask before Bash</button></div>
+        <div class="row">&nbsp;</div>
+        <div class="row"><b>Pinned rules</b></div>
+        <div class="row dim">Sent with every request, kept through /compact.</div>
+        <div class="row"><button class="tog p" data-on="1">☑</button> <span>use pnpm, not npm</span></div>
+        <div class="row"><button class="tog p" data-on="0">☐</button> <span class="dim">never edit db/migrations</span></div>
+        <div class="row field">Pin a rule, e.g. use pnpm, not npm</div>
       </div>
-      <div class="view" id="changes" hidden>
-        <div class="row"><span class="ag">⎇ feat/auth-guard</span> <span class="run">· 3 uncommitted</span> <span class="dim">· 1 commit this session</span></div>
+      <div class="view" id="ask" hidden>
+        <div class="row field">Ask about this conversation…</div>
+        <div class="row dim">Answered aside: not added to the chat.</div>
+        <div class="btnrow"><span class="dim">Selection:</span><span>[ Explain ]</span><span>[ Quote ]</span><span>[ Pin ]</span></div>
         <div class="row">&nbsp;</div>
-        <div class="row"><b>Checks</b></div>
-        <div class="row"><span class="ok"><b>✓ tests</b></span> <span class="err">▫▫</span><span class="ok">▪▪</span> <span class="dim"> turn 6 · npm test</span></div>
-        <div class="row"><span class="ok"><b>✓ types</b></span> <span class="ok">▪</span> <span class="dim"> turn 6 · tsc --noEmit</span></div>
+        <div class="row"><b>? which file had the auth bug?</b></div>
+        <div class="row">src/middleware/auth.ts: the token</div>
+        <div class="row">expiry check used &lt; instead of &lt;=.</div>
+        <div class="row dim">↳ Insert into prompt   ✕</div>
         <div class="row">&nbsp;</div>
-        <div class="row"><b>Files changed</b> <span class="dim">4 files · </span><span class="ok">+86</span> <span class="err">-12</span></div>
-        <div class="row">▸ ✎ src/router.ts  +24 -6  3× · T5,T6</div>
-        <div class="row">▸ ✚ src/middleware/auth.ts  +48 -0  1× · T6</div>
-        <div class="row">&nbsp;</div>
-        <div class="row"><b>Check before shipping</b></div>
-        <div class="row">☐ I assumed the session store is Redis. <span class="dim">· T6</span></div>
-        <div class="row">☐ I didn't test the logout path. <span class="dim">· T6</span></div>
+        <div class="row"><b>? what did we decide about caching?</b></div>
+        <div class="row">Skip Redis for now; in-memory LRU,</div>
+        <div class="row">revisit when there's more than one instance.</div>
       </div>
-      <div class="view" id="todos" hidden>
-        <div class="row"><span class="ok">██████░░░░░░░░</span> 3/7</div>
-        <div class="row dim">✓ Write data model</div>
-        <div class="row dim">✓ Collectors</div>
-        <div class="row dim">✓ Header and tabs</div>
-        <div class="row run"><b>● Rendering the flow tab</b></div>
-        <div class="row">○ Decision tool</div>
-        <div class="row">○ Persistence</div>
-        <div class="row">○ Tests</div>
-      </div>
-      <div class="view" id="decisions" hidden>
-        <div class="row"><b>◆ Middleware over per-route guard</b></div>
-        <div class="row dim">one place to audit</div>
-        <div class="row dim"><s>per-route decorator</s></div>
-        <div class="row dim">→ turn 6</div>
-        <div class="row">&nbsp;</div>
-        <div class="row"><b>◆ Native pane over browser three.js view</b></div>
-        <div class="row dim">lives inside Claude Code, no sidecar</div>
-        <div class="row dim">→ turn 2</div>
-        <div class="row">&nbsp;</div>
-        <div class="row"><b>~ Haiku extraction off by default</b></div>
-        <div class="row dim">costs a model call per turn</div>
-      </div>
-      <pre class="cat" id="cat" aria-label="Flowpane cat" style="background:none;border:0;padding:0;margin:8px 0 0;text-align:right;color:#e0a96d;font-size:13px;line-height:1.3"></pre>
+      <pre class="cat" id="cat" aria-label="Flowpane cat"></pre>
     </div>
   </section>
 
-  <h2>What it shows</h2>
+  <h2>Why a mod</h2>
   <div class="grid">
-    <div class="card"><h3>Flow</h3><p>A diagram of the questions you were asked and what you picked, copyable as Mermaid. Then turns, newest first. Tool calls appear live with their status. A subagent folds into one line until you open it.</p></div>
-    <div class="card"><h3>Changes</h3><p>Files changed with inline diffs, test/type/lint/build status, git branch and uncommitted count, and assumptions to check before shipping.</p></div>
-    <div class="card"><h3>Needs you</h3><p>Questions waiting on you, refused tool calls, and background servers still running, with a Stop button.</p></div>
-    <div class="card"><h3>Todos</h3><p>The agent's task list from TodoWrite or TaskCreate/TaskUpdate, with progress and the current step.</p></div>
-    <div class="card"><h3>Decisions</h3><p>What was chosen, why, and what was rejected, linked back to the turn that made the choice.</p></div>
-    <div class="card"><h3>Context</h3><p>Tokens used and tokens left, so you know when to start a fresh chat.</p></div>
+    <div class="card"><h3>Pinned rules</h3><p>Injected into the system prompt, so the agent still follows them after <code>/compact</code> and 200 messages later. Saved per project.</p></div>
+    <div class="card"><h3>Live guards</h3><p>Read-only, No git push, Ask before Bash: one press to switch on or off for this session, enforced at the permission check.</p></div>
+    <div class="card"><h3>Ask aside</h3><p>A forked, tool-free question over the conversation, using its prompt cache. The agent never sees it and its context doesn't grow.</p></div>
+    <div class="card"><h3>Selection</h3><p>Select text in the transcript, then Explain it aside, Quote it into your prompt, or Pin it as a rule.</p></div>
   </div>
 
   <h2>Install</h2>
   <p>Needs Claude Code 2.1.289 or newer. Flowpane uses the early-access function-hook plugin API.</p>
   <pre>claude plugin marketplace add diwakersurya/flowpane
 claude plugin install flowpane@flowpane</pre>
-  <p>Then run <code>/flow</code>. The pane also opens by itself in terminals at least 144 columns wide.</p>
 
   <h2>Commands</h2>
   <div class="table-wrap">
     <table>
       <tr><th>Command</th><th>Does</th></tr>
-      <tr><td><code>/flow</code></td><td>Opens or closes the pane</td></tr>
-      <tr><td><code>/flow flow</code> · <code>changes</code> · <code>todos</code> · <code>decisions</code></td><td>Opens the pane on that tab</td></tr>
-      <tr><td><code>/flow clear</code></td><td>Clears the panel. The conversation is untouched</td></tr>
+      <tr><td><code>/flow</code></td><td>Opens or closes the panel. <code>/flow pins</code> and <code>/flow ask</code> open a tab</td></tr>
+      <tr><td><code>/pin &lt;rule&gt;</code></td><td>Pins a rule. <code>/pin</code> alone lists your pins</td></tr>
+      <tr><td><code>/ask &lt;question&gt;</code></td><td>Asks aside; the answer shows in the panel</td></tr>
     </table>
   </div>
 
-  <h2>Why a native pane</h2>
-  <p>A browser page with three.js or React Three Fiber would mean a second window, a local server and a port. A separate TUI would mean tailing an undocumented transcript file. Flowpane runs inside Claude Code as a mod: it gets every event first-hand and draws in the terminal, the desktop app and VS Code. Flow, todos and decisions are a graph, a list and a log, and a third dimension wouldn't add anything.</p>
-
   <h2>Privacy</h2>
-  <p>Everything stays local. No network calls, no keys, no file contents stored. The opt-in decision extraction uses your own Claude Code session's model.</p>
+  <p>Everything stays local. Pins live in the plugin's store on your machine. Ask-aside requests go through your own Claude Code session. Guards are a convenience, not a sandbox.</p>
 
   <footer>MIT · a hobby project by <a href="https://github.com/diwakersurya">diwakersurya</a></footer>
 </main>
 <script>
-  const colors = ['--read','--read','--write','--shell','--read','--agent','--read','--read','--write','--mcp','--shell','--write','--read','--err','--write','--read','--shell','--agent','--read','--write','--read','--read','--write','--shell','--read','--write','--read','--read','--write','--run']
-  const mini = document.getElementById('mini')
-  colors.forEach((c, i) => {
-    const b = document.createElement('b')
-    b.style.background = `var(${c})`
-    if (i === colors.length - 1) b.className = 'pulse'
-    mini.appendChild(b)
-  })
   const EYES = { '-2': '<.<  ', '-1': 'o.o  ', '0': ' o.o ', '1': '  o.o', '2': '  >.>' }
-  const TARGET = { flow: -2, changes: -1, todos: 1, decisions: 2 }
+  const TARGET = { pins: -2, ask: 2 }
   const cat = document.getElementById('cat')
   let pos = -2, timer
   const draw = () => {
@@ -204,6 +163,17 @@ claude plugin install flowpane@flowpane</pre>
     turn(TARGET[t.dataset.v])
     document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t))
     document.querySelectorAll('.view').forEach(v => { v.hidden = v.id !== t.dataset.v })
+  }))
+  const count = () => {
+    const n = document.querySelectorAll('.tog[data-on="1"]').length
+    document.getElementById('count').textContent = n ? n + ' on' : ''
+  }
+  document.querySelectorAll('.tog').forEach(b => b.addEventListener('click', () => {
+    const on = b.dataset.on !== '1'
+    b.dataset.on = on ? '1' : '0'
+    if (b.classList.contains('g')) b.textContent = (on ? '● ' : '○ ') + b.textContent.slice(2)
+    else { b.textContent = on ? '☑' : '☐'; b.nextElementSibling?.classList.toggle('dim', !on) }
+    count()
   }))
 </script>
 </body>

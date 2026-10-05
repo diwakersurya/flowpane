@@ -1,131 +1,90 @@
 # Flowpane
 
-A live side panel for Claude Code. While the conversation runs, it shows what the agent is doing, what's left on its task list, and why it chose what it chose, so you don't have to scroll the transcript to find out.
+A small side panel for Claude Code that does two things no status line or hook can:
+
+- **Pins + guards:** steer the agent live. Pin rules it follows on every request, even after `/compact`. Flip guards that block or ask before certain tool calls, from the panel, with no settings to edit and no restart.
+- **Ask aside:** ask a quick question about the conversation and get the answer in the panel. The question never enters the conversation, never interrupts the agent, and doesn't use up its context.
 
 **Site:** https://diwakersurya.github.io/flowpane/
 
 ```
 ╭ Flowpane ─────────────────────────────╮
-│ [Flow]  Todos 3/7  Decisions 4        │
-│ ctx ███████░░░ 112k/200k · 88k left   │
-│ ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆        │
-│ ▼ Turn 6 "add auth guard"  41s ●      │
-│   ✓ Read src/router.ts                │
-│   ✓ Grep requireAuth                  │
-│   ▸ ◆ Explore: find session store  2  │
-│   ● Edit src/router.ts  running       │
-│ ▸ Turn 5 "write spec"  12 calls · 2m  │
+│ [Pins 3 on]  Ask                      │
 │                                       │
-│ ◆ Middleware over per-route guard     │
-│   one place to audit                  │
+│ Guards                                │
+│ ● Read-only                           │
+│ ○ No git push                         │
+│ ● Ask before Bash                     │
+│                                       │
+│ Pinned rules                          │
+│ ☑ use pnpm, not npm               ✕   │
+│ ☐ never edit db/migrations        ✕   │
+│ [ Pin a rule, e.g. use pnpm…   ]      │
 │                               /\_/\   │
 │                              (<.<  )  │
 │                               > ^ <   │
 ╰───────────────────────────────────────╯
 ```
 
-- **Flow**: at the top, every question the agent asked you (`AskUserQuestion`) as a diagram: each question, the option you picked (✓) and the ones you passed over. **Copy Mermaid** (or `m`) copies it as a Mermaid flowchart to paste into GitHub, Obsidian or a PR. Questions asked before Flowpane loaded are rebuilt from the session history. Below that come the turns, newest first. The current turn is open; older turns fold into one line. Each tool call shows its status (`●` running, `✓` done, `✗` error, `⊘` denied). A subagent folds into one `◆` line with its call count; press it to see inside.
-- **Changes**: what the agent did to your repo.
-  - Git strip: branch, ahead/behind, uncommitted files, and commits made this session.
-  - Checks: latest test, type-check, lint and build result as ✓/✗, with a history of recent runs. Flowpane spots these from the shell commands the agent runs (`npm test`, `tsc`, `eslint`, `cargo build`…).
-  - Files changed: each file with `+/-` lines, edit count and the turns that touched it. Press a file to see its diff inline.
-  - Check before shipping: sentences from answers that flag assumptions, untested paths, skipped steps, TODOs or manual follow-ups. Tick ☐ to dismiss one.
-  - The tab label shows ✗ when any latest check failed.
-- **Needs you** (above every tab, only when there's something): questions waiting for your answer, tool calls you refused this turn, and background shells or agents still running (with dev-server port, how long, and a Stop button).
-- **Todos**: the agent's task list (`TodoWrite`, `TaskCreate`, `TaskUpdate`) with a progress bar. The task in progress shows its "-ing" form.
-- **Decisions**: choices the agent made, why, and what it rejected. Each one links back to the turn that made it.
-- **Context bar**: tokens used and tokens left in the context window, so you can tell when to start a fresh chat.
-- **Minimap** (terminal): one coloured cell per tool call for the whole session. Blue is reads, amber is edits, violet is shell, teal is agents, pink is MCP, and red is errors.
-- **A cat** at the bottom of the panel turns its head toward the tab you pick: left for Flow, straight ahead for Todos, right for Decisions.
-- **Lanes** (desktop app, VS Code): an SVG diagram with one lane for the main agent and one per subagent, with hover tooltips.
+## Pins + guards
+
+**Pinned rules** are added to the system prompt of every request while they're ticked. Because they live in the system prompt, they survive `/compact` and long sessions, unlike a rule you typed once 200 messages ago. Pins are saved per project folder, so they come back next session. Tick or untick them freely.
+
+**Guards** are switches for this session only (every new session starts with them off):
+
+| Guard | What it does |
+| --- | --- |
+| Read-only | Blocks `Edit`, `Write` and `NotebookEdit`, and shell commands that change files (`rm`, `mv`, `>` redirects, `sed -i`, `git commit`, `npm install`…). The agent is told to describe changes instead |
+| No git push | Blocks `git push`. Commits still work |
+| Ask before Bash | Every shell command goes through Claude Code's own permission prompt, even ones your settings would allow |
+
+The agent is also told which guards are on, so it doesn't keep walking into them. Guards are a convenience, not a sandbox: the read-only check matches common commands, and a determined script could still write files.
+
+Under the hood, a guard is a `tool.check` hook (the permission decision) and pins are a `prompt.compose` section. Toggling either changes the system prompt, which costs one prompt-cache miss on the next request.
+
+## Ask aside
+
+Type a question in the **Ask** tab, for example "which file had the auth bug?", "what did we decide about caching?" or "summarise the last diff". Flowpane uses `$.model.fork`: one tool-free request over the conversation as it stands, using the same prompt cache, so it's cheap. The answer appears in the panel and the agent never sees the question.
+
+- **↳ Insert into prompt** drops an answer into your prompt box.
+- **Selection** buttons work on text you've selected in the transcript (fullscreen terminal or desktop): **Explain** asks about it aside, **Quote** inserts it into your prompt as a `>` quote, **Pin** turns it into a pinned rule.
 
 ## Install
 
-Needs Claude Code **2.1.289 or newer**. Flowpane is a function-hook mod, and that plugin API is early access.
-
-From the marketplace in this repo:
+Needs Claude Code **2.1.289 or newer**. Flowpane uses the early-access function-hook plugin API.
 
 ```sh
 claude plugin marketplace add diwakersurya/flowpane
 claude plugin install flowpane@flowpane
 ```
 
-Or from a clone, for one session:
+Or from a clone: `claude --plugin-dir ./flowpane`. To load it everywhere, including the desktop app, set `CLAUDE_CODE_PLUGIN_DIRS` in the `env` block of `~/.claude/settings.json`.
 
-```sh
-git clone https://github.com/diwakersurya/flowpane.git
-claude --plugin-dir ./flowpane
-```
-
-To load the clone every time, including in the desktop app, add it to `~/.claude/settings.json`:
-
-```json
-{ "env": { "CLAUDE_CODE_PLUGIN_DIRS": "~/path/to/flowpane" } }
-```
-
-## Use
-
-The pane opens by itself when a session starts in a terminal at least **144 columns** wide. In a narrower terminal, open it yourself:
+## Commands
 
 | Command | Does |
 | --- | --- |
-| `/flow` | Opens or closes the pane |
-| `/flow flow` · `/flow changes` · `/flow todos` · `/flow decisions` | Opens the pane on that tab |
-| `/flow clear` | Clears the panel. The conversation is untouched |
+| `/flow` | Opens or closes the panel. `/flow pins` and `/flow ask` open a tab |
+| `/pin <rule>` | Pins a rule. `/pin` alone lists your pins |
+| `/ask <question>` | Asks aside; the answer shows in the Ask tab |
 
-When the pane has focus, `f`, `c`, `t` and `d` switch tabs, Tab walks the rows, and Enter folds or unfolds a turn or subagent. If you close the pane, it stays closed in later sessions until you run `/flow` again.
+When the panel has focus, `p` and `a` switch tabs, and `e` and `q` run Explain and Quote on your selection. The panel opens by itself in terminals at least 144 columns wide (turn that off with `autoOpen` in `/config`). The mobile app has no text fields yet, so there you use `/pin` and `/ask`.
 
-## Settings
-
-Change these in `/config` (or under `pluginConfigs.flowpane.options` in settings):
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| `autoOpen` | `true` | Open the pane at startup |
-| `decisionTool` | `true` | Give the model a `RecordDecision` tool and ask it to log real choices (about 60 tokens of system prompt) |
-| `inferDecisions` | `false` | When a turn logged no decision but its answer reads like one ("rather than", "went with"), ask Haiku to extract it. Costs one small model call per such turn. Marked `~` in the panel |
-| `minimap` | `true` | Show the terminal minimap row |
-| `maxNodes` | `500` | Past this many nodes, older turns keep only their summary line |
-
-## How it works
-
-Flowpane is a plugin of function hooks (`hooks/register.tsx`) that only watches. Each hook passes its event on unchanged:
-
-| Event | Feeds |
-| --- | --- |
-| `turn.start`, `turn.complete` | turn rows and durations |
-| `tool.call` | tool rows and their status, todos from `TodoWrite` / `TaskCreate` / `TaskUpdate`, and questions with your answers from `AskUserQuestion` |
-| `agent.spawn` | links a subagent's calls to its Agent row |
-| `classic.Stop` | the engine's list of background tasks still running |
-| `session.measure` | the context bar |
-| `turn.complete` + `git` | loose ends from the answer; git status refreshed (`git status`, `git rev-list` via `$.process.run`) |
-| `prompt.compose` | the one-paragraph decision instruction (when `decisionTool` is on) |
-
-State lives in the session's `$.state`, so it survives hot reloads. After each turn a snapshot is saved to the plugin's `$.store`, so `claude --resume` brings the panel back. Snapshots older than 14 days are deleted.
-
-The pure logic (reducers, row layout, minimap, SVG) is in `hooks/model.ts`, and the views are in `hooks/views.tsx`.
+And yes, the cat turns its head toward the tab you pick.
 
 ## Privacy
 
-Everything stays on your machine. Flowpane makes no network calls. It runs read-only `git status`, `git rev-parse` and `git rev-list` in the session's folder. The one exception is the opt-in `inferDecisions` extraction, which goes through your own Claude Code session's model client. Tool arguments are cut down to short labels, file contents are never stored, and no keys or account details are read or kept.
+Everything stays local. Pins are kept in the plugin's own store on your machine. Ask-aside requests go through your own Claude Code session, like any other turn. Flowpane makes no other network calls and reads no keys or account details.
 
 ## Develop
 
 ```sh
 claude plugin validate .   # what the engine sees and would refuse
-claude plugin test .       # reducer tests + pane tests on terminal, desktop, VS Code, mobile
+claude plugin test .       # logic tests + pane tests on terminal, desktop and mobile
 claude --plugin-dir .      # run it; saving a file hot-reloads the mod
 ```
 
-After the first load, Claude Code writes the API types to `.claude-plugin/types/`, and `npx tsc -p .` type-checks against them.
-
 Pushing a `v*` tag runs the checks and attaches a zip of the plugin to a GitHub release.
-
-## Limits
-
-- The function-hook API is early access and may change between Claude Code releases.
-- Decisions depend on the model calling `RecordDecision`. It usually does for real forks in the road, and `inferDecisions` covers the rest.
-- The pane can't run browser code (there's no DOM), so it can't render Mermaid itself. Flowpane draws the same graph (box characters in the terminal, SVG elsewhere) and copies the real Mermaid source for you.
 
 ## License
 

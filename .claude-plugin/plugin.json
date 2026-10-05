@@ -1,7 +1,7 @@
 {
   "name": "flowpane",
-  "version": "0.4.0",
-  "description": "Live side panel showing the flow, todos and decisions of the current Claude Code conversation",
+  "version": "1.0.0",
+  "description": "Side panel for Claude Code: pin rules the model keeps through /compact, flip live guards (read-only, no push, ask before Bash), and ask side questions that never enter the conversation",
   "author": {
     "name": "Diwaker Singh",
     "url": "https://github.com/diwakersurya"
@@ -13,30 +13,6 @@
       "title": "Open at startup",
       "description": "Open the Flowpane pane when a session starts (seats from 144 terminal columns)",
       "default": true
-    },
-    "decisionTool": {
-      "type": "boolean",
-      "title": "Decision tool",
-      "description": "Give the model a RecordDecision tool and ask it to log choices between approaches",
-      "default": true
-    },
-    "inferDecisions": {
-      "type": "boolean",
-      "title": "Infer decisions",
-      "description": "When a turn logged no decision, ask the small fast model to extract one from the answer (costs model calls)",
-      "default": false
-    },
-    "minimap": {
-      "type": "boolean",
-      "title": "Minimap",
-      "description": "Show a one-row minimap of every tool call in the terminal",
-      "default": true
-    },
-    "maxNodes": {
-      "type": "number",
-      "title": "Max flow nodes",
-      "description": "Older turns collapse to a summary past this many nodes",
-      "default": 500
     }
   },
   "homepage": "https://diwakersurya.github.io/flowpane/",
@@ -46,7 +22,7 @@
     "claude-code",
     "mod",
     "side-panel",
-    "todos",
-    "visualization"
+    "guardrails",
+    "pins"
   ]
 }

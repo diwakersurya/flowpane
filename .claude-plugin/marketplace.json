@@ -9,7 +9,7 @@
     {
       "name": "flowpane",
       "source": "./",
-      "description": "Live side panel showing the flow, todos and decisions of the current Claude Code conversation"
+      "description": "Pin rules the model keeps through /compact, flip live guards, and ask side questions that never enter the conversation"
     }
   ]
 }
