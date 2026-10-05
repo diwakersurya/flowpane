@@ -276,8 +276,8 @@ export function svgLanes(nodes: readonly FlowNode[], now: number, max = 60): str
 
 // ── pet ────────────────────────────────────────────────────────────
 
-/** Where the cat looks: -2 far left (Flow), 0 ahead (Todos), 2 far right (Decisions). */
-export const PET_TARGET: Record<'flow' | 'todos' | 'decisions', number> = { flow: -2, todos: 0, decisions: 2 }
+/** Where the cat looks, tab by tab left to right: -2 Flow, -1 Changes, 1 Todos, 2 Decisions. */
+export const PET_TARGET: Record<'flow' | 'changes' | 'todos' | 'decisions', number> = { flow: -2, changes: -1, todos: 1, decisions: 2 }
 
 const EYES: Record<number, string> = { [-2]: '<.<  ', [-1]: 'o.o  ', 0: ' o.o ', 1: '  o.o', 2: '  >.>' }
 

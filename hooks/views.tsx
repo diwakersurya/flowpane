@@ -6,16 +6,25 @@ import { bar, buildRows, clip, duration, ICON, kilo } from './model'
 /** The elements every surface draws: what the shared views are built from. */
 export type Common = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
-const TAB_NAMES: Record<Tab, string> = { flow: 'Flow', todos: 'Todos', decisions: 'Decisions' }
-const HOTKEY: Record<Tab, string> = { flow: 'f', todos: 't', decisions: 'd' }
+const TAB_NAMES: Record<Tab, string> = { flow: 'Flow', changes: 'Changes', todos: 'Todos', decisions: 'Decisions' }
+const HOTKEY: Record<Tab, string> = { flow: 'f', changes: 'c', todos: 't', decisions: 'd' }
 
 export function Header(
   { Box, Text, Button }: Common,
-  p: { tab: Tab; todos: readonly Todo[]; decisions: readonly Decision[]; context: ContextFill | null; width: number; onTab: (t: Tab) => void },
+  p: {
+    tab: Tab
+    todos: readonly Todo[]
+    decisions: readonly Decision[]
+    changes: { files: number; isFailing: boolean }
+    context: ContextFill | null
+    width: number
+    onTab: (t: Tab) => void
+  },
 ) {
   const done = p.todos.filter(t => t.status === 'completed').length
   const badge: Record<Tab, string> = {
     flow: '',
+    changes: p.changes.isFailing ? ' ✗' : p.changes.files ? ` ${p.changes.files}` : '',
     todos: p.todos.length ? ` ${done}/${p.todos.length}` : '',
     decisions: p.decisions.length ? ` ${p.decisions.length}` : '',
   }

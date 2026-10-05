@@ -1,10 +1,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer, UiPressArgument } from 'claude-code'
 
-import type { ContextFill, Decision, FlowNode, Question, Snapshot, Tab, Todo } from '../types'
+import type { BgTask, Check, ContextFill, Decision, FileChange, FlowNode, GitState, LooseEnd, Question, Snapshot, Tab, Todo } from '../types'
+import { ChangesTab, NeedsYou } from './changes'
+import { addLooseEnds, classify, extractLooseEnds, latestChecks, mergeBackground, parseGitStatus, portOf, recordCheck, recordEdit, relative } from './dev'
 import {
   answered,
   asked,
+  clip,
   currentTurn,
   endNode,
   extractPrompt,
@@ -37,6 +40,12 @@ const nodes = atom({ plugin: 'flowpane', key: 'nodes' } as const, [] as FlowNode
 const todos = atom({ plugin: 'flowpane', key: 'todos' } as const, [] as Todo[])
 const decisions = atom({ plugin: 'flowpane', key: 'decisions' } as const, [] as Decision[])
 const questions = atom({ plugin: 'flowpane', key: 'questions' } as const, [] as Question[])
+const files = atom({ plugin: 'flowpane', key: 'files' } as const, [] as FileChange[])
+const checks = atom({ plugin: 'flowpane', key: 'checks' } as const, [] as Check[])
+const background = atom({ plugin: 'flowpane', key: 'background' } as const, [] as BgTask[])
+const looseEnds = atom({ plugin: 'flowpane', key: 'looseEnds' } as const, [] as LooseEnd[])
+const git = atom({ plugin: 'flowpane', key: 'git' } as const, null as GitState | null)
+const gitBase = atom({ plugin: 'flowpane', key: 'gitBase' } as const, '')
 const agents = atom({ plugin: 'flowpane', key: 'agents' } as const, {} as Record<string, string>)
 const toggled = atom({ plugin: 'flowpane', key: 'toggled' } as const, [] as string[])
 const tab = atom({ plugin: 'flowpane', key: 'tab' } as const, 'flow' as Tab)
@@ -62,6 +71,10 @@ async function save($: $) {
     decisions: await read($, decisions),
     agents: await read($, agents),
     questions: await read($, questions),
+    files: await read($, files),
+    checks: await read($, checks),
+    looseEnds: await read($, looseEnds),
+    gitBase: await read($, gitBase),
     savedAt: await $.clock.now(),
   }
   await $.store.set(await storeKey($), snap)
@@ -86,6 +99,10 @@ async function restoreAndPrune($: $) {
   await update($, decisions, () => snap.decisions)
   await update($, agents, () => snap.agents)
   await update($, questions, () => snap.questions ?? [])
+  await update($, files, () => snap.files ?? [])
+  await update($, checks, () => snap.checks ?? [])
+  await update($, looseEnds, () => snap.looseEnds ?? [])
+  await update($, gitBase, () => snap.gitBase ?? '')
 }
 
 async function reset($: $) {
@@ -94,6 +111,10 @@ async function reset($: $) {
   await update($, decisions, () => [])
   await update($, agents, () => ({}))
   await update($, questions, () => [])
+  await update($, files, () => [])
+  await update($, checks, () => [])
+  await update($, background, () => [])
+  await update($, looseEnds, () => [])
   await update($, toggled, () => [])
 }
 
@@ -119,6 +140,33 @@ async function stepPet($: $, target: number) {
   await update($, petPos, p => stepToward(p, target))
 }
 
+/** Branch, ahead/behind, uncommitted files, and commits since the session began; null outside a repo. */
+async function refreshGit($: $) {
+  const run = (argv: string[]) => $.process.run(argv, { timeoutMs: 5000 }).catch(() => undefined)
+  const status = await run(['git', 'status', '--porcelain=v1', '-b'])
+  if (!status || status.exitCode !== 0) {
+    await update($, git, () => null)
+    return
+  }
+  let base = await read($, gitBase)
+  if (!base) {
+    const head = await run(['git', 'rev-parse', 'HEAD'])
+    // 'none': the repo had no commits when the session began, so every commit is the session's.
+    base = head?.exitCode === 0 ? head.stdout.trim() : 'none'
+    const fixed = base
+    await update($, gitBase, () => fixed)
+  }
+  const count = await run(['git', 'rev-list', '--count', base === 'none' ? 'HEAD' : `${base}..HEAD`])
+  const commits = count?.exitCode === 0 ? Number(count.stdout.trim()) || 0 : 0
+  const parsed = parseGitStatus(status.stdout)
+  await update($, git, () => ({ ...parsed, commits }))
+}
+
+async function stopTask($: $, id: string) {
+  await $.tool.call({ tool: 'TaskStop', task_id: id }).catch(() => undefined)
+  await update($, background, list => list.filter(t => t.id !== id))
+}
+
 function openPane($: $) {
   return $.ui.open({ id: PANE, title: TITLE })
 }
@@ -139,7 +187,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'flow',
-      description: 'Flowpane: toggle the panel, or `/flow todos|decisions|flow|clear`',
+      description: 'Flowpane: toggle the panel, or `/flow flow|changes|todos|decisions|clear`',
     })
     if (isDecisionTool) {
       await $.tool.register({
@@ -158,6 +206,7 @@ export const register: Register = (on, options) => {
       })
     }
     await restoreAndPrune($)
+    await refreshGit($)
     const wasClosed = (await $.store.get('closedByPerson')) === true
     if (e.isInteractive && options.autoOpen !== false && !wasClosed) void openPane($)
 
@@ -180,14 +229,14 @@ export const register: Register = (on, options) => {
       await reset($)
       return { text: 'Flowpane view cleared.' }
     }
-    if (arg === 'flow' || arg === 'todos' || arg === 'decisions') {
+    if (arg === 'flow' || arg === 'changes' || arg === 'todos' || arg === 'decisions') {
       await setTab($, arg)
     } else if (arg === '' && (await $.ui.panes()).some(p => p.id === PANE)) {
       await $.ui.close({ id: PANE })
       await $.store.set('closedByPerson', true)
       return { text: 'Flowpane closed.' }
     } else if (arg !== '') {
-      return { text: 'Usage: /flow [flow|todos|decisions|clear]' }
+      return { text: 'Usage: /flow [flow|changes|todos|decisions|clear]' }
     }
     await $.store.set('closedByPerson', false)
     await openPane($)
@@ -214,6 +263,9 @@ export const register: Register = (on, options) => {
     if (e.agentId) return next(e)
     const at = await $.clock.now()
     await update($, nodes, list => endNode(list, e.turnId, e.isAborted ? 'error' : e.reason === 'answer' ? 'done' : 'error', at))
+    const loose = extractLooseEnds(e.answer)
+    if (loose.length) await update($, looseEnds, list => addLooseEnds(list, loose, e.turnId, at))
+    await refreshGit($)
     await save($)
 
     const shouldInfer =
@@ -235,6 +287,12 @@ export const register: Register = (on, options) => {
         })().catch(() => {})
       })
     }
+    return next(e)
+  })
+
+  on('classic.Stop', async ($, e, next) => {
+    const now = await $.clock.now()
+    await update($, background, list => mergeBackground(list, e.background_tasks ?? [], now))
     return next(e)
   })
 
@@ -291,6 +349,43 @@ export const register: Register = (on, options) => {
         if (created) await update($, todos, list => taskCreate(list, created.id, e.subject, e.activeForm, now))
       } else if (e.tool === 'TaskUpdate') await update($, todos, list => taskUpdate(list, e, now))
     }
+    if (!r.deny && !r.isError) {
+      const now = await $.clock.now()
+      const turn = currentTurn(await read($, nodes))?.n
+      if ((e.tool === 'Edit' || e.tool === 'Write') && r.result) {
+        const res = r.result as { filePath: string; structuredPatch?: { oldStart: number; oldLines: number; newStart: number; newLines: number; lines: string[] }[]; type?: string; originalFile?: string | null }
+        const path = relative(res.filePath, await $.session.cwd())
+        const isNew = res.type === 'create' || res.originalFile === null
+        await update($, files, list => recordEdit(list, { path, hunks: res.structuredPatch ?? [], isNew, turn }))
+      } else if (e.tool === 'NotebookEdit') {
+        const path = relative(e.notebook_path, await $.session.cwd())
+        await update($, files, list => recordEdit(list, { path, hunks: [], isNew: false, turn }))
+      } else if (e.tool === 'Bash' && r.result) {
+        const res = r.result as { backgroundTaskId?: string }
+        if (res.backgroundTaskId) {
+          const task: BgTask = {
+            id: res.backgroundTaskId,
+            kind: 'local_bash',
+            label: clip(e.description || e.command, 48),
+            command: e.command,
+            port: portOf(e.command),
+            startedAt: now,
+          }
+          await update($, background, list => [...list.filter(t => t.id !== task.id), task])
+        }
+      } else if (e.tool === 'TaskStop') {
+        const gone = e.task_id ?? e.shell_id
+        await update($, background, list => list.filter(t => t.id !== gone))
+      }
+    }
+    if (e.tool === 'Bash' && !e.run_in_background && !r.deny) {
+      const kind = classify(e.command)
+      const res = r.result as { interrupted?: boolean; backgroundTaskId?: string } | undefined
+      if (kind && !res?.backgroundTaskId && !res?.interrupted) {
+        const check: Check = { kind, ok: !r.isError, command: e.command, turn: currentTurn(await read($, nodes))?.n, at: await $.clock.now() }
+        await update($, checks, list => recordCheck(list, check))
+      }
+    }
     if (e.tool === 'AskUserQuestion') {
       const answers = !r.deny && !r.isError ? (r.result as { answers?: Record<string, unknown> } | undefined)?.answers : undefined
       await update($, questions, list => answered(list, id, answers))
@@ -307,7 +402,7 @@ export const register: Register = (on, options) => {
     const els = $.ui.resolve(e)
     const width = Math.max(20, e.props.bodyColumns)
     const room = Math.max(6, (e.viewport?.rows ?? 30) - 8)
-    const [n, t, d, open, current, ctx, pos, qs] = await Promise.all([
+    const [n, t, d, open, current, ctx, pos, qs, fs, cs, bg, le, g] = await Promise.all([
       read($, nodes),
       read($, todos),
       read($, decisions),
@@ -316,6 +411,11 @@ export const register: Register = (on, options) => {
       read($, context),
       read($, petPos),
       read($, questions),
+      read($, files),
+      read($, checks),
+      read($, background),
+      read($, looseEnds),
+      read($, git),
     ])
     const now = await $.clock.now()
     const onTab = (next: Tab) => void setTab($, next)
@@ -333,6 +433,11 @@ export const register: Register = (on, options) => {
         $.ui.toast(r.isCopied ? 'Mermaid copied to the clipboard' : 'Could not copy here')
       })
     }
+    const onStop = (id: string) => void stopTask($, id)
+    const onDone = (id: string) => void update($, looseEnds, list => list.map(l => (l.id === id ? { ...l, isDone: true } : l)))
+    const turnNo = (turnId: string) => n.find(x => x.id === turnId)?.n
+    const latest = currentTurn(n)
+    const denied = latest ? n.filter(x => x.status === 'denied' && x.parent === latest.id) : []
     const { Box } = els
 
     let picture = null
@@ -353,7 +458,11 @@ export const register: Register = (on, options) => {
     }
 
     const body =
-      current === 'todos'
+      current === 'changes'
+        ? guard(els, 'changes', () =>
+            ChangesTab(els, { git: g, checks: cs, files: fs, looseEnds: le, open, width, turnNo, onToggle, onDone }),
+          )
+        : current === 'todos'
         ? guard(els, 'todos', () => TodoList(els, { todos: t, width }))
         : current === 'decisions'
           ? guard(els, 'decisions', () => DecisionList(els, { decisions: d, nodes: n, width, onJump }))
@@ -378,7 +487,16 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column" width={width}>
-        {guard(els, 'header', () => Header(els, { tab: current, todos: t, decisions: d, context: ctx, width, onTab }))}
+        {guard(els, 'header', () => Header(els, {
+            tab: current,
+            todos: t,
+            decisions: d,
+            changes: { files: fs.length, isFailing: latestChecks(cs).some(c => !c.ok) },
+            context: ctx,
+            width,
+            onTab,
+          }))}
+        {guard(els, 'needs-you', () => NeedsYou(els, { questions: qs, denied, background: bg, now, width, onStop }))}
         {picture}
         <Box flexDirection="column" marginTop={1}>
           {body}

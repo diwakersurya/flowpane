@@ -53,7 +53,30 @@ export type Question = {
   at: number
 }
 
-export type Tab = 'flow' | 'todos' | 'decisions'
+export type FileChange = {
+  /** Relative to the session's directory when inside it. */
+  path: string
+  edits: number
+  added: number
+  removed: number
+  isNew: boolean
+  /** Turn numbers that touched it. */
+  turns: number[]
+  /** Unified diff hunks, newest first, capped. */
+  patch: string
+}
+
+export type CheckKind = 'test' | 'build' | 'lint' | 'types'
+
+export type Check = { kind: CheckKind; ok: boolean; command: string; turn?: number; at: number }
+
+export type BgTask = { id: string; kind: string; label: string; command?: string; port?: number; startedAt: number }
+
+export type LooseEnd = { id: string; turnId: string; text: string; isDone: boolean }
+
+export type GitState = { branch: string; ahead: number; behind: number; dirty: number; commits: number }
+
+export type Tab = 'flow' | 'changes' | 'todos' | 'decisions'
 
 export type ContextFill = { used: number; window: number; percent: number }
 
@@ -63,6 +86,10 @@ export type Snapshot = {
   decisions: Decision[]
   agents: Record<string, string>
   questions?: Question[]
+  files?: FileChange[]
+  checks?: Check[]
+  looseEnds?: LooseEnd[]
+  gitBase?: string
   savedAt: number
 }
 
@@ -74,6 +101,15 @@ declare module 'claude-code' {
       decisions: Decision[]
       /** Questions the agent asked the person, in order, with what they chose. */
       questions: Question[]
+      files: FileChange[]
+      checks: Check[]
+      /** Background shells and agents still running. */
+      background: BgTask[]
+      looseEnds: LooseEnd[]
+      /** Null outside a git repository. */
+      git: GitState | null
+      /** HEAD when the session began, to count its commits. */
+      gitBase: string
       /** Subagent loop id → the Agent tool call's node id. */
       agents: Record<string, string>
       /** Ids of turn and agent nodes the person toggled open or shut. */

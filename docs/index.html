@@ -77,6 +77,7 @@
       <div class="bar"><i></i><i></i><i></i></div>
       <div class="tabs" role="tablist">
         <button class="tab on" data-v="flow">[Flow]</button>
+        <button class="tab" data-v="changes">Changes 4</button>
         <button class="tab" data-v="todos">Todos 3/7</button>
         <button class="tab" data-v="decisions">Decisions 4</button>
       </div>
@@ -100,6 +101,21 @@
         <div class="row">&nbsp;</div>
         <div class="row dec">◆ Middleware over per-route guard</div>
         <div class="row dim">  one place to audit</div>
+      </div>
+      <div class="view" id="changes" hidden>
+        <div class="row"><span class="ag">⎇ feat/auth-guard</span> <span class="run">· 3 uncommitted</span> <span class="dim">· 1 commit this session</span></div>
+        <div class="row">&nbsp;</div>
+        <div class="row"><b>Checks</b></div>
+        <div class="row"><span class="ok"><b>✓ tests</b></span> <span class="err">▫▫</span><span class="ok">▪▪</span> <span class="dim"> turn 6 · npm test</span></div>
+        <div class="row"><span class="ok"><b>✓ types</b></span> <span class="ok">▪</span> <span class="dim"> turn 6 · tsc --noEmit</span></div>
+        <div class="row">&nbsp;</div>
+        <div class="row"><b>Files changed</b> <span class="dim">4 files · </span><span class="ok">+86</span> <span class="err">-12</span></div>
+        <div class="row">▸ ✎ src/router.ts  +24 -6  3× · T5,T6</div>
+        <div class="row">▸ ✚ src/middleware/auth.ts  +48 -0  1× · T6</div>
+        <div class="row">&nbsp;</div>
+        <div class="row"><b>Check before shipping</b></div>
+        <div class="row">☐ I assumed the session store is Redis. <span class="dim">· T6</span></div>
+        <div class="row">☐ I didn't test the logout path. <span class="dim">· T6</span></div>
       </div>
       <div class="view" id="todos" hidden>
         <div class="row"><span class="ok">██████░░░░░░░░</span> 3/7</div>
@@ -131,6 +147,8 @@
   <h2>What it shows</h2>
   <div class="grid">
     <div class="card"><h3>Flow</h3><p>A diagram of the questions you were asked and what you picked, copyable as Mermaid. Then turns, newest first. Tool calls appear live with their status. A subagent folds into one line until you open it.</p></div>
+    <div class="card"><h3>Changes</h3><p>Files changed with inline diffs, test/type/lint/build status, git branch and uncommitted count, and assumptions to check before shipping.</p></div>
+    <div class="card"><h3>Needs you</h3><p>Questions waiting on you, refused tool calls, and background servers still running, with a Stop button.</p></div>
     <div class="card"><h3>Todos</h3><p>The agent's task list from TodoWrite or TaskCreate/TaskUpdate, with progress and the current step.</p></div>
     <div class="card"><h3>Decisions</h3><p>What was chosen, why, and what was rejected, linked back to the turn that made the choice.</p></div>
     <div class="card"><h3>Context</h3><p>Tokens used and tokens left, so you know when to start a fresh chat.</p></div>
@@ -147,7 +165,7 @@ claude plugin install flowpane@flowpane</pre>
     <table>
       <tr><th>Command</th><th>Does</th></tr>
       <tr><td><code>/flow</code></td><td>Opens or closes the pane</td></tr>
-      <tr><td><code>/flow todos</code> · <code>decisions</code> · <code>flow</code></td><td>Opens the pane on that tab</td></tr>
+      <tr><td><code>/flow flow</code> · <code>changes</code> · <code>todos</code> · <code>decisions</code></td><td>Opens the pane on that tab</td></tr>
       <tr><td><code>/flow clear</code></td><td>Clears the panel. The conversation is untouched</td></tr>
     </table>
   </div>
@@ -170,7 +188,7 @@ claude plugin install flowpane@flowpane</pre>
     mini.appendChild(b)
   })
   const EYES = { '-2': '<.<  ', '-1': 'o.o  ', '0': ' o.o ', '1': '  o.o', '2': '  >.>' }
-  const TARGET = { flow: -2, todos: 0, decisions: 2 }
+  const TARGET = { flow: -2, changes: -1, todos: 1, decisions: 2 }
   const cat = document.getElementById('cat')
   let pos = -2, timer
   const draw = () => {

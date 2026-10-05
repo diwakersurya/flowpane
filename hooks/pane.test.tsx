@@ -119,3 +119,73 @@ test('flow shows the questions asked, what was picked, and copies Mermaid', asyn
   expect(await desk.find({ type: 'Svg' })).toBeDefined()
   expect(await desk.find({ key: 'copy-mermaid' })).toBeDefined()
 })
+
+test('changes tab: files with diffs, checks, loose ends; needs-you strip with stop', async ($, on) => {
+  world(on)
+  const stopped: string[] = []
+  on('tool.call', async (_$, e) => {
+    if (e.tool === 'Edit')
+      return {
+        result: {
+          filePath: '/repo/src/router.ts',
+          oldString: 'a',
+          newString: 'b',
+          originalFile: 'a',
+          structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines: ['-a', '+b'] }],
+          userModified: false,
+          replaceAll: false,
+        },
+      }
+    if (e.tool === 'Bash' && e.command === 'npm test') return { result: { stdout: '', stderr: 'fail', interrupted: false }, isError: true as const }
+    if (e.tool === 'Bash' && e.run_in_background) return { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'bg1' } }
+    if (e.tool === 'TaskStop') {
+      stopped.push(String(e.task_id))
+      return { result: { message: 'stopped', task_id: String(e.task_id), task_type: 'local_bash' } }
+    }
+    return { result: 'ok' }
+  })
+  on('session.cwd', () => ({ value: '/repo' }))
+
+  await $.turn.start({ text: 'guard', turnId: 't1' })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/router.ts', old_string: 'a', new_string: 'b', tool_use_id: 'e1' })
+  await $.tool.call({ tool: 'Bash', command: 'npm test', tool_use_id: 'b1' })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev -- --port 5173', description: 'dev server', run_in_background: true, tool_use_id: 'b2' })
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await ui.find({ text: /dev server/ })).toBeDefined()
+    expect(await ui.find({ text: /:5173/ })).toBeDefined()
+    expect(await ui.find({ key: 'tab-changes', text: /✗/ })).toBeDefined()
+
+    await ui.press({ key: 'tab-changes' })
+    expect(await ui.find({ text: /✗ tests/ })).toBeDefined()
+    expect(await ui.find({ key: 'row-file:src/router.ts', text: /\+1 -1/ })).toBeDefined()
+    await ui.press({ key: 'row-file:src/router.ts' })
+    expect(await ui.find({ type: 'Code' })).toBeDefined()
+    await ui.press({ key: 'row-file:src/router.ts' })
+    await ui.press({ key: 'tab-flow' })
+    await ui.unmount()
+  }
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'stop-bg1' })
+  expect(stopped).toEqual(['bg1'])
+  expect(await ui.find({ text: /dev server/ })).toBeUndefined()
+})
+
+test('loose ends from a finished turn show under Changes and can be ticked off', async ($, on) => {
+  world(on)
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  on('session.id', () => ({ value: 's1' }))
+  on('process.run', () => ({ value: { exitCode: 128, stdout: '', stderr: 'not a git repo', isStdoutTruncated: false, isStderrTruncated: false } }))
+  await $.turn.start({ text: 'guard', turnId: 't1' })
+  await $.turn.complete({ answer: 'Added it. I assumed the store is Redis. Tests pass.', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-changes' })
+  expect(await ui.find({ text: /I assumed the store is Redis\./ })).toBeDefined()
+  expect(await ui.find({ text: /⎇/ })).toBeUndefined()
+  const item = await ui.findAll({ type: 'Button', text: '☐' })
+  await ui.press({ key: (item[0] as { key: string }).key })
+  expect(await ui.find({ text: /Nothing flagged/ })).toBeDefined()
+})

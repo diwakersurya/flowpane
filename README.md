@@ -25,6 +25,13 @@ A live side panel for Claude Code. While the conversation runs, it shows what th
 ```
 
 - **Flow**: at the top, every question the agent asked you (`AskUserQuestion`) as a diagram: each question, the option you picked (✓) and the ones you passed over. **Copy Mermaid** (or `m`) copies it as a Mermaid flowchart to paste into GitHub, Obsidian or a PR. Questions asked before Flowpane loaded are rebuilt from the session history. Below that come the turns, newest first. The current turn is open; older turns fold into one line. Each tool call shows its status (`●` running, `✓` done, `✗` error, `⊘` denied). A subagent folds into one `◆` line with its call count; press it to see inside.
+- **Changes**: what the agent did to your repo.
+  - Git strip: branch, ahead/behind, uncommitted files, and commits made this session.
+  - Checks: latest test, type-check, lint and build result as ✓/✗, with a history of recent runs. Flowpane spots these from the shell commands the agent runs (`npm test`, `tsc`, `eslint`, `cargo build`…).
+  - Files changed: each file with `+/-` lines, edit count and the turns that touched it. Press a file to see its diff inline.
+  - Check before shipping: sentences from answers that flag assumptions, untested paths, skipped steps, TODOs or manual follow-ups. Tick ☐ to dismiss one.
+  - The tab label shows ✗ when any latest check failed.
+- **Needs you** (above every tab, only when there's something): questions waiting for your answer, tool calls you refused this turn, and background shells or agents still running (with dev-server port, how long, and a Stop button).
 - **Todos**: the agent's task list (`TodoWrite`, `TaskCreate`, `TaskUpdate`) with a progress bar. The task in progress shows its "-ing" form.
 - **Decisions**: choices the agent made, why, and what it rejected. Each one links back to the turn that made it.
 - **Context bar**: tokens used and tokens left in the context window, so you can tell when to start a fresh chat.
@@ -63,10 +70,10 @@ The pane opens by itself when a session starts in a terminal at least **144 colu
 | Command | Does |
 | --- | --- |
 | `/flow` | Opens or closes the pane |
-| `/flow todos` · `/flow decisions` · `/flow flow` | Opens the pane on that tab |
+| `/flow flow` · `/flow changes` · `/flow todos` · `/flow decisions` | Opens the pane on that tab |
 | `/flow clear` | Clears the panel. The conversation is untouched |
 
-When the pane has focus, `f`, `t` and `d` switch tabs, Tab walks the rows, and Enter folds or unfolds a turn or subagent. If you close the pane, it stays closed in later sessions until you run `/flow` again.
+When the pane has focus, `f`, `c`, `t` and `d` switch tabs, Tab walks the rows, and Enter folds or unfolds a turn or subagent. If you close the pane, it stays closed in later sessions until you run `/flow` again.
 
 ## Settings
 
@@ -89,7 +96,9 @@ Flowpane is a plugin of function hooks (`hooks/register.tsx`) that only watches.
 | `turn.start`, `turn.complete` | turn rows and durations |
 | `tool.call` | tool rows and their status, todos from `TodoWrite` / `TaskCreate` / `TaskUpdate`, and questions with your answers from `AskUserQuestion` |
 | `agent.spawn` | links a subagent's calls to its Agent row |
+| `classic.Stop` | the engine's list of background tasks still running |
 | `session.measure` | the context bar |
+| `turn.complete` + `git` | loose ends from the answer; git status refreshed (`git status`, `git rev-list` via `$.process.run`) |
 | `prompt.compose` | the one-paragraph decision instruction (when `decisionTool` is on) |
 
 State lives in the session's `$.state`, so it survives hot reloads. After each turn a snapshot is saved to the plugin's `$.store`, so `claude --resume` brings the panel back. Snapshots older than 14 days are deleted.
@@ -98,7 +107,7 @@ The pure logic (reducers, row layout, minimap, SVG) is in `hooks/model.ts`, and 
 
 ## Privacy
 
-Everything stays on your machine. Flowpane makes no network calls. The one exception is the opt-in `inferDecisions` extraction, which goes through your own Claude Code session's model client. Tool arguments are cut down to short labels, file contents are never stored, and no keys or account details are read or kept.
+Everything stays on your machine. Flowpane makes no network calls. It runs read-only `git status`, `git rev-parse` and `git rev-list` in the session's folder. The one exception is the opt-in `inferDecisions` extraction, which goes through your own Claude Code session's model client. Tool arguments are cut down to short labels, file contents are never stored, and no keys or account details are read or kept.
 
 ## Develop
 
