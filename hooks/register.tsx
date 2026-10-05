@@ -1,27 +1,32 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register, Timer, UiPressArgument } from 'claude-code'
 
-import type { ContextFill, Decision, FlowNode, Snapshot, Tab, Todo } from '../types'
+import type { ContextFill, Decision, FlowNode, Question, Snapshot, Tab, Todo } from '../types'
 import {
+  answered,
+  asked,
   currentTurn,
   endNode,
   extractPrompt,
   fromTodoWrite,
   hasDecisionCue,
+  mermaidOf,
   minimapCells,
   parseDecision,
   PET_TARGET,
   petFrame,
   prune,
+  questionsFromHistory,
   startTool,
   stepToward,
   startTurn,
   svgLanes,
+  svgQuestions,
   taskCreate,
   taskUpdate,
   toolLabel,
 } from './model'
-import { DecisionList, FlowList, guard, Header, LastDecision, Pet, petSvg, TodoList } from './views'
+import { DecisionList, FlowList, guard, Header, LastDecision, Pet, petSvg, QuestionFlow, TodoList } from './views'
 
 const PANE = 'flowpane'
 const TITLE = 'Flowpane'
@@ -31,6 +36,7 @@ const SNAPSHOT_TTL_MS = 14 * 24 * 3600 * 1000
 const nodes = atom({ plugin: 'flowpane', key: 'nodes' } as const, [] as FlowNode[])
 const todos = atom({ plugin: 'flowpane', key: 'todos' } as const, [] as Todo[])
 const decisions = atom({ plugin: 'flowpane', key: 'decisions' } as const, [] as Decision[])
+const questions = atom({ plugin: 'flowpane', key: 'questions' } as const, [] as Question[])
 const agents = atom({ plugin: 'flowpane', key: 'agents' } as const, {} as Record<string, string>)
 const toggled = atom({ plugin: 'flowpane', key: 'toggled' } as const, [] as string[])
 const tab = atom({ plugin: 'flowpane', key: 'tab' } as const, 'flow' as Tab)
@@ -55,6 +61,7 @@ async function save($: $) {
     todos: await read($, todos),
     decisions: await read($, decisions),
     agents: await read($, agents),
+    questions: await read($, questions),
     savedAt: await $.clock.now(),
   }
   await $.store.set(await storeKey($), snap)
@@ -67,6 +74,10 @@ async function restoreAndPrune($: $) {
     const snap = (await $.store.get(key)) as Snapshot | undefined
     if (!snap || now - snap.savedAt > SNAPSHOT_TTL_MS) await $.store.delete(key)
   }
+  if ((await read($, questions)).length === 0) {
+    const history = questionsFromHistory(await $.session.messages(), now)
+    if (history.length) await update($, questions, () => history.slice(-100))
+  }
   if ((await read($, nodes)).length > 0) return // a hot reload keeps $.state
   const snap = (await $.store.get(await storeKey($))) as Snapshot | undefined
   if (!snap) return
@@ -74,6 +85,7 @@ async function restoreAndPrune($: $) {
   await update($, todos, () => snap.todos)
   await update($, decisions, () => snap.decisions)
   await update($, agents, () => snap.agents)
+  await update($, questions, () => snap.questions ?? [])
 }
 
 async function reset($: $) {
@@ -81,6 +93,7 @@ async function reset($: $) {
   await update($, todos, () => [])
   await update($, decisions, () => [])
   await update($, agents, () => ({}))
+  await update($, questions, () => [])
   await update($, toggled, () => [])
 }
 
@@ -263,6 +276,10 @@ export const register: Register = (on, options) => {
       ? `${String(input.subagent_type ?? 'agent')}: ${String(input.description ?? '')}`
       : toolLabel(tool, input)
     await update($, nodes, list => startTool(list, { id, kind: isAgent ? 'agent' : 'tool', tool, label, parent, startedAt: at }))
+    if (e.tool === 'AskUserQuestion') {
+      const turnId = currentTurn(await read($, nodes))?.id ?? ''
+      await update($, questions, list => [...list, ...asked(e, id, turnId, at)].slice(-100))
+    }
 
     const r = await next(e)
 
@@ -273,6 +290,10 @@ export const register: Register = (on, options) => {
         const created = (r.result as { task?: { id: string } }).task
         if (created) await update($, todos, list => taskCreate(list, created.id, e.subject, e.activeForm, now))
       } else if (e.tool === 'TaskUpdate') await update($, todos, list => taskUpdate(list, e, now))
+    }
+    if (e.tool === 'AskUserQuestion') {
+      const answers = !r.deny && !r.isError ? (r.result as { answers?: Record<string, unknown> } | undefined)?.answers : undefined
+      await update($, questions, list => answered(list, id, answers))
     }
     const status = r.deny ? 'denied' : r.isError ? 'error' : 'done'
     const endedAt = await $.clock.now()
@@ -286,7 +307,7 @@ export const register: Register = (on, options) => {
     const els = $.ui.resolve(e)
     const width = Math.max(20, e.props.bodyColumns)
     const room = Math.max(6, (e.viewport?.rows ?? 30) - 8)
-    const [n, t, d, open, current, ctx, pos] = await Promise.all([
+    const [n, t, d, open, current, ctx, pos, qs] = await Promise.all([
       read($, nodes),
       read($, todos),
       read($, decisions),
@@ -294,6 +315,7 @@ export const register: Register = (on, options) => {
       read($, tab),
       read($, context),
       read($, petPos),
+      read($, questions),
     ])
     const now = await $.clock.now()
     const onTab = (next: Tab) => void setTab($, next)
@@ -305,6 +327,11 @@ export const register: Register = (on, options) => {
       void update($, toggled, list =>
         turnId === latest ? list.filter(x => x !== turnId) : list.includes(turnId) ? list : [...list, turnId],
       )
+    }
+    const onCopy = (press: UiPressArgument) => {
+      void $.ui.copy({ text: mermaidOf(qs), surface: press.surface }).then(r => {
+        $.ui.toast(r.isCopied ? 'Mermaid copied to the clipboard' : 'Could not copy here')
+      })
     }
     const { Box } = els
 
@@ -332,6 +359,18 @@ export const register: Register = (on, options) => {
           ? guard(els, 'decisions', () => DecisionList(els, { decisions: d, nodes: n, width, onJump }))
           : guard(els, 'flow', () => (
               <Box flexDirection="column">
+                {QuestionFlow(els, {
+                  questions: qs.slice(-8),
+                  width,
+                  onCopy,
+                  picture:
+                    e.surface === 'terminal' || qs.length === 0
+                      ? undefined
+                      : (() => {
+                          const { Svg } = $.ui.resolve(e)
+                          return <Svg source={svgQuestions(qs.slice(-8))} alt="Questions asked and the options picked" isInteractive />
+                        })(),
+                })}
                 {FlowList(els, { nodes: n, toggled: open, now, width, room, onToggle })}
                 {LastDecision(els, { decision: d[d.length - 1], width })}
               </Box>

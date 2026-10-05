@@ -1,6 +1,6 @@
 {
   "name": "flowpane",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Live side panel showing the flow, todos and decisions of the current Claude Code conversation",
   "author": {
     "name": "Diwaker Singh",

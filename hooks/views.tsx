@@ -1,6 +1,6 @@
-import type { Elements, RenderNode } from 'claude-code'
+import type { Elements, RenderNode, UiPressArgument } from 'claude-code'
 
-import type { ContextFill, Decision, FlowNode, Tab, Todo } from '../types'
+import type { ContextFill, Decision, FlowNode, Question, Tab, Todo } from '../types'
 import { bar, buildRows, clip, duration, ICON, kilo } from './model'
 
 /** The elements every surface draws: what the shared views are built from. */
@@ -188,4 +188,49 @@ export function petSvg(frame: readonly string[]): string {
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const rows = frame.map((line, i) => `<text x="2" y="${14 + i * 15}" xml:space="preserve">${esc(line)}</text>`).join('')
   return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="50" font-family="ui-monospace,Menlo,monospace" font-size="13" fill="#e0a96d">${rows}</svg>`
+}
+
+/**
+ * The questions the agent asked and what was picked, top to bottom. On the
+ * terminal drawn with box characters; elsewhere `picture` (an SVG) stands in.
+ */
+export function QuestionFlow(
+  { Box, Text, Button }: Common,
+  p: { questions: readonly Question[]; width: number; picture?: RenderNode; onCopy: (press: UiPressArgument) => void },
+) {
+  if (p.questions.length === 0) return null
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Box justifyContent="space-between">
+        <Text bold>Questions</Text>
+        <Button key="copy-mermaid" label="Copy Mermaid" hotkey="m" onPress={p.onCopy} />
+      </Box>
+      {p.picture ??
+        p.questions.map((q, i) => (
+          <Box flexDirection="column">
+            <Text color="#c2410c" bold wrap="truncate">
+              ◇ {q.header}
+            </Text>
+            <Text dimColor wrap="truncate">
+              │ {clip(q.question, p.width - 2)}
+            </Text>
+            <Text wrap="truncate">
+              │{'  '}
+              {q.status === 'answered' ? (
+                <Text color="green">✓ {[...q.chosen, ...(q.other ? [`“${q.other}”`] : [])].join(' + ')}</Text>
+              ) : (
+                <Text color="yellow">{q.status === 'waiting' ? '… waiting for answer' : '⊘ declined'}</Text>
+              )}
+              <Text dimColor>
+                {q.options
+                  .filter(o => !q.chosen.includes(o))
+                  .map(o => `  · ${o}`)
+                  .join('')}
+              </Text>
+            </Text>
+            {i + 1 < p.questions.length && <Text dimColor>▼</Text>}
+          </Box>
+        ))}
+    </Box>
+  )
 }

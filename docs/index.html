@@ -82,6 +82,13 @@
       </div>
       <div class="row dim">ctx <span class="ok">███████</span>░░░░░ 112k / 200k · 88k left</div>
       <div class="view" id="flow">
+        <div class="row" style="display:flex;justify-content:space-between"><b>Questions</b><span class="dim">[ Copy Mermaid ]</span></div>
+        <div class="row" style="color:#fb923c">◇ Pet</div>
+        <div class="row dim">│ Which pet should live in the panel?</div>
+        <div class="row">│  <span class="ok">✓ Cat</span><span class="dim">  · Owl  · Tiny bird</span></div>
+        <div class="row dim">▼</div>
+        <div class="row" style="color:#fb923c">◇ Placement</div>
+        <div class="row">│  <span class="ok">✓ Bottom of the panel</span><span class="dim">  · Right of the tabs</span></div>
         <div class="mini" id="mini" aria-hidden="true"></div>
         <div class="row">▼ Turn 6 "add auth guard"  41s <span class="run pulse">●</span></div>
         <div class="row dim">  <span class="ok">✓</span> Read src/router.ts</div>
@@ -123,7 +130,7 @@
 
   <h2>What it shows</h2>
   <div class="grid">
-    <div class="card"><h3>Flow</h3><p>Turns, newest first. Tool calls appear live with their status. A subagent folds into one line until you open it.</p></div>
+    <div class="card"><h3>Flow</h3><p>A diagram of the questions you were asked and what you picked, copyable as Mermaid. Then turns, newest first. Tool calls appear live with their status. A subagent folds into one line until you open it.</p></div>
     <div class="card"><h3>Todos</h3><p>The agent's task list from TodoWrite or TaskCreate/TaskUpdate, with progress and the current step.</p></div>
     <div class="card"><h3>Decisions</h3><p>What was chosen, why, and what was rejected, linked back to the turn that made the choice.</p></div>
     <div class="card"><h3>Context</h3><p>Tokens used and tokens left, so you know when to start a fresh chat.</p></div>

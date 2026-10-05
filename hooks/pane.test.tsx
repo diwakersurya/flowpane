@@ -88,3 +88,34 @@ test('the cat turns its head toward the tab', async ($, on) => {
     await ui.unmount()
   }
 })
+
+test('flow shows the questions asked, what was picked, and copies Mermaid', async ($, on) => {
+  world(on)
+  const copied: string[] = []
+  on('ui.copy', (_$, e) => {
+    copied.push(e.text)
+    return { value: { isCopied: true as const } }
+  })
+  on('ui.toast', () => ({ value: undefined }))
+  on('tool.call', async (_$, e) => {
+    if (e.tool === 'AskUserQuestion') return { result: { questions: e.questions, answers: { 'Which pet?': 'Cat' } } as never }
+    return { result: 'ok' }
+  })
+  await $.turn.start({ text: 'add a pet', turnId: 't1' })
+  await $.tool.call({
+    tool: 'AskUserQuestion',
+    tool_use_id: 'ask1',
+    questions: [{ question: 'Which pet?', header: 'Pet', multiSelect: false, options: [{ label: 'Owl', description: '' }, { label: 'Cat', description: '' }] }],
+  } as never)
+
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ text: /◇ Pet/ })).toBeDefined()
+  expect(await term.find({ text: /✓ Cat/ })).toBeDefined()
+  await term.press({ key: 'copy-mermaid' })
+  expect(copied[0]).toContain('flowchart TD')
+  await term.unmount()
+
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await desk.find({ type: 'Svg' })).toBeDefined()
+  expect(await desk.find({ key: 'copy-mermaid' })).toBeDefined()
+})

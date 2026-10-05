@@ -24,7 +24,7 @@ A live side panel for Claude Code. While the conversation runs, it shows what th
 ╰───────────────────────────────────────╯
 ```
 
-- **Flow**: turns, newest first. The current turn is open; older turns fold into one line. Each tool call shows its status (`●` running, `✓` done, `✗` error, `⊘` denied). A subagent folds into one `◆` line with its call count; press it to see inside.
+- **Flow**: at the top, every question the agent asked you (`AskUserQuestion`) as a diagram: each question, the option you picked (✓) and the ones you passed over. **Copy Mermaid** (or `m`) copies it as a Mermaid flowchart to paste into GitHub, Obsidian or a PR. Questions asked before Flowpane loaded are rebuilt from the session history. Below that come the turns, newest first. The current turn is open; older turns fold into one line. Each tool call shows its status (`●` running, `✓` done, `✗` error, `⊘` denied). A subagent folds into one `◆` line with its call count; press it to see inside.
 - **Todos**: the agent's task list (`TodoWrite`, `TaskCreate`, `TaskUpdate`) with a progress bar. The task in progress shows its "-ing" form.
 - **Decisions**: choices the agent made, why, and what it rejected. Each one links back to the turn that made it.
 - **Context bar**: tokens used and tokens left in the context window, so you can tell when to start a fresh chat.
@@ -87,7 +87,7 @@ Flowpane is a plugin of function hooks (`hooks/register.tsx`) that only watches.
 | Event | Feeds |
 | --- | --- |
 | `turn.start`, `turn.complete` | turn rows and durations |
-| `tool.call` | tool rows and their status, plus todos from `TodoWrite` / `TaskCreate` / `TaskUpdate` |
+| `tool.call` | tool rows and their status, todos from `TodoWrite` / `TaskCreate` / `TaskUpdate`, and questions with your answers from `AskUserQuestion` |
 | `agent.spawn` | links a subagent's calls to its Agent row |
 | `session.measure` | the context bar |
 | `prompt.compose` | the one-paragraph decision instruction (when `decisionTool` is on) |
@@ -116,7 +116,7 @@ Pushing a `v*` tag runs the checks and attaches a zip of the plugin to a GitHub 
 
 - The function-hook API is early access and may change between Claude Code releases.
 - Decisions depend on the model calling `RecordDecision`. It usually does for real forks in the road, and `inferDecisions` covers the rest.
-- The pane can't run browser code (there's no DOM), so the desktop diagram is static SVG with CSS hover.
+- The pane can't run browser code (there's no DOM), so it can't render Mermaid itself. Flowpane draws the same graph (box characters in the terminal, SVG elsewhere) and copies the real Mermaid source for you.
 
 ## License
 

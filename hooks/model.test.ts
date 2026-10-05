@@ -1,6 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 
 import {
+  answered,
+  asked,
+  mermaidOf,
+  questionsFromHistory,
+  svgQuestions,
   buildRows,
   endNode,
   fromTodoWrite,
@@ -92,4 +97,45 @@ test('cat frames keep their width and turn one step at a time', async () => {
   const seen: number[] = []
   while (pos !== 2) seen.push((pos = stepToward(pos, 2)))
   expect(seen).toEqual([-1, 0, 1, 2])
+})
+
+const ASK = {
+  questions: [
+    { question: 'Which pet?', header: 'Pet', options: [{ label: 'Owl' }, { label: 'Cat' }, { label: 'Bird' }] },
+    { question: 'Where?', header: 'Placement', options: [{ label: 'Bottom' }, { label: 'Right' }] },
+    { question: 'Extras?', header: 'Extras', options: [{ label: 'Blink' }, { label: 'Purr' }, { label: 'Tail' }] },
+  ],
+}
+
+test('questions settle from answers: single, typed-in, multi, and declined', async () => {
+  const qs = asked(ASK, 'c1', 't1', 0)
+  expect(qs.map(q => q.status)).toEqual(['waiting', 'waiting', 'waiting'])
+  const done = answered(qs, 'c1', { 'Which pet?': 'Cat', 'Where?': 'On the tabs please', 'Extras?': 'Blink, Tail' })
+  expect(done[0]).toMatchObject({ chosen: ['Cat'], status: 'answered' })
+  expect(done[1]).toMatchObject({ chosen: [], other: 'On the tabs please' })
+  expect(done[2]!.chosen).toEqual(['Blink', 'Tail'])
+  expect(answered(qs, 'c1', undefined).every(q => q.status === 'declined')).toBe(true)
+  expect(answered(qs, 'other', {})).toEqual(qs)
+})
+
+test('mermaid leads through picked answers and hangs the rest dotted', async () => {
+  const done = answered(asked(ASK, 'c1', 't1', 0).slice(0, 2), 'c1', { 'Which pet?': 'Cat' })
+  const m = mermaidOf(done)
+  expect(m.startsWith('flowchart TD')).toBe(true)
+  expect(m).toContain('q0 -->|"Cat"| q1')
+  expect(m).toContain('q0 -.- q0o0["Owl"]:::dim')
+  expect(m).toContain('q1 -.->|"declined"|')
+  expect(svgQuestions(done).startsWith('<svg')).toBe(true)
+})
+
+test('questions are rebuilt from history', async () => {
+  const rows = [
+    { toolUses: [{ tool_use_id: 'x', tool: 'Read', input: {} }] },
+    { toolUses: [{ tool_use_id: 'a1', tool: 'AskUserQuestion', input: ASK, result: { answers: { 'Which pet?': 'Cat' } } }] },
+    { toolUses: [{ tool_use_id: 'a2', tool: 'AskUserQuestion', input: { questions: [ASK.questions[0]!] } }] },
+  ]
+  const qs = questionsFromHistory(rows, 5)
+  expect(qs.length).toBe(4)
+  expect(qs[0]!.chosen).toEqual(['Cat'])
+  expect(qs[3]!.status).toBe('waiting')
 })

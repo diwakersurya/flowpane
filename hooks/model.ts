@@ -1,5 +1,5 @@
 // Pure reducers and derivations: no `$`, so tests run them directly.
-import type { Decision, FlowNode, Status, Todo, TodoStatus } from '../types'
+import type { Decision, FlowNode, Question, Status, Todo, TodoStatus } from '../types'
 
 const LABEL_MAX = 60
 
@@ -290,3 +290,112 @@ export function petFrame(pos: number): [string, string, string] {
 
 /** One step of the head from `pos` toward `target`. */
 export const stepToward = (pos: number, target: number) => pos + Math.sign(target - pos)
+
+// ── questions ──────────────────────────────────────────────────────
+
+type AskInput = { questions: readonly { question: string; header: string; options: readonly { label: string }[] }[] }
+
+/** One waiting Question per question of an AskUserQuestion call. */
+export function asked(input: AskInput, callId: string, turnId: string, at: number): Question[] {
+  return input.questions.map((q, i) => ({
+    id: `${callId}:${i}`,
+    turnId,
+    header: q.header,
+    question: q.question,
+    options: q.options.map(o => o.label),
+    chosen: [],
+    status: 'waiting' as const,
+    at,
+  }))
+}
+
+/**
+ * Settles a call's questions from the tool's `answers` (question text →
+ * picked labels, comma-joined for multi-select). A part matching no option
+ * is what the person typed instead. No answers at all: declined.
+ */
+export function answered(questions: readonly Question[], callId: string, answers: Readonly<Record<string, unknown>> | undefined): Question[] {
+  return questions.map(q => {
+    if (!q.id.startsWith(callId + ':') || q.status !== 'waiting') return q
+    const raw = answers?.[q.question]
+    if (typeof raw !== 'string' || !raw.trim()) return { ...q, status: 'declined' as const }
+    const exact = q.options.find(o => o === raw.trim())
+    const parts = exact ? [exact] : raw.split(/,\s*/).map(x => x.trim()).filter(Boolean)
+    const chosen = parts.filter(x => q.options.includes(x))
+    const rest = parts.filter(x => !q.options.includes(x)).join(', ')
+    return { ...q, chosen, other: rest || undefined, status: 'answered' as const }
+  })
+}
+
+const mq = (s: string) => clip(s, 48).replace(/"/g, '#quot;')
+
+/** The questions as a Mermaid flowchart: picked answers lead on, unpicked options hang off dotted. */
+export function mermaidOf(questions: readonly Question[]): string {
+  const out = ['flowchart TD']
+  questions.forEach((q, i) => {
+    const id = `q${i}`
+    out.push(`  ${id}{"${mq(q.header)}<br/>${mq(q.question)}"}`)
+    const picked = [...q.chosen, ...(q.other ? [`“${q.other}”`] : [])]
+    const target = i + 1 < questions.length ? `q${i + 1}` : `end${i}((" "))`
+    if (q.status === 'answered') out.push(`  ${id} -->|"${mq(picked.join(' + '))}"| ${target}`)
+    else out.push(`  ${id} -.->|"${q.status === 'waiting' ? 'waiting…' : 'declined'}"| ${target}`)
+    q.options
+      .filter(o => !q.chosen.includes(o))
+      .forEach((o, j) => out.push(`  ${id} -.- ${id}o${j}["${mq(o)}"]:::dim`))
+  })
+  out.push('  classDef dim fill:#f4f4f4,stroke:#bbb,color:#999')
+  return out.join('\n')
+}
+
+/** The same graph as an SVG column of question boxes, picked options filled, arrows between. */
+export function svgQuestions(questions: readonly Question[], width = 360): string {
+  const out: string[] = []
+  let y = 6
+  const chip = (x: number, label: string, isPicked: boolean) => {
+    const w = Math.min(width - x - 8, 14 + label.length * 6.6)
+    out.push(
+      `<rect x="${x}" y="${y}" width="${w}" height="20" rx="10" fill="${isPicked ? '#22a55a' : 'none'}" stroke="${isPicked ? '#22a55a' : '#888'}" stroke-dasharray="${isPicked ? '' : '3 2'}"/>`,
+      `<text x="${x + 7}" y="${y + 14}" fill="${isPicked ? '#fff' : '#999'}">${esc(clip(label, 40))}</text>`,
+    )
+    return x + w + 6
+  }
+  questions.forEach((q, i) => {
+    out.push(
+      `<rect x="4" y="${y}" width="${width - 8}" height="38" rx="6" fill="none" stroke="#c2410c"/>`,
+      `<text x="12" y="${y + 15}" fill="#c2410c" font-weight="600">${esc(clip(q.header, 40))}</text>`,
+      `<text x="12" y="${y + 31}" fill="#888">${esc(clip(q.question, Math.floor((width - 24) / 6.6)))}</text>`,
+    )
+    y += 46
+    let x = 16
+    const picks = [...q.chosen.map(c => [c, true] as const), ...(q.other ? [[`“${q.other}”`, true] as const] : [])]
+    const rest = q.options.filter(o => !q.chosen.includes(o)).map(o => [o, false] as const)
+    for (const [label, isPicked] of [...picks, ...rest]) {
+      if (x > width - 60) { x = 16; y += 24 }
+      x = chip(x, label, isPicked)
+    }
+    if (q.status !== 'answered') {
+      out.push(`<text x="${x + 2}" y="${y + 14}" fill="#eab308">${q.status === 'waiting' ? '… waiting' : 'declined'}</text>`)
+    }
+    y += 26
+    if (i + 1 < questions.length) {
+      out.push(`<path d="M ${width / 2} ${y} v 12" stroke="#888" marker-end="url(#a)"/>`)
+      y += 16
+    }
+  })
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${y + 4}" font-family="ui-sans-serif,system-ui,sans-serif" font-size="11"><defs><marker id="a" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#888"/></marker></defs>${out.join('')}</svg>`
+}
+
+type HistoryRow = { toolUses: readonly { tool_use_id: string; tool: string; input: Record<string, unknown>; result?: unknown; isError?: true }[] }
+
+/** Rebuilds the questions from the conversation so far (asked before the mod loaded, or on resume). */
+export function questionsFromHistory(rows: readonly HistoryRow[], at: number): Question[] {
+  return rows.flatMap(row =>
+    row.toolUses
+      .filter(u => u.tool === 'AskUserQuestion' && Array.isArray((u.input as Partial<AskInput>).questions))
+      .flatMap(u => {
+        const answers = u.isError ? undefined : (u.result as { answers?: Record<string, unknown> } | undefined)?.answers
+        const qs = asked(u.input as AskInput, u.tool_use_id, '', at)
+        return u.result === undefined && !u.isError ? qs : answered(qs, u.tool_use_id, answers)
+      }),
+  )
+}

@@ -38,6 +38,21 @@ export type Decision = {
   at: number
 }
 
+export type Question = {
+  /** The AskUserQuestion call's id and the question's index in it. */
+  id: string
+  turnId: string
+  header: string
+  question: string
+  options: string[]
+  /** Option labels the person picked; empty while waiting or when they typed their own. */
+  chosen: string[]
+  /** What they typed instead of picking an option ("Other"). */
+  other?: string
+  status: 'waiting' | 'answered' | 'declined'
+  at: number
+}
+
 export type Tab = 'flow' | 'todos' | 'decisions'
 
 export type ContextFill = { used: number; window: number; percent: number }
@@ -47,6 +62,7 @@ export type Snapshot = {
   todos: Todo[]
   decisions: Decision[]
   agents: Record<string, string>
+  questions?: Question[]
   savedAt: number
 }
 
@@ -56,6 +72,8 @@ declare module 'claude-code' {
       nodes: FlowNode[]
       todos: Todo[]
       decisions: Decision[]
+      /** Questions the agent asked the person, in order, with what they chose. */
+      questions: Question[]
       /** Subagent loop id → the Agent tool call's node id. */
       agents: Record<string, string>
       /** Ids of turn and agent nodes the person toggled open or shut. */
